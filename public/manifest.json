@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "TabFlow - AI 垂直标签与工作空间",
+  "version": "1.0.0",
+  "description": "Chrome 侧边栏极速垂直标签管理、标签组智能折叠、本机 Codex 智能分类与稍后读整合。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "tabGroups",
+    "storage",
+    "favicon",
+    "bookmarks",
+    "readingList",
+    "contextMenus",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "打开 TabFlow 侧边栏",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "_execute_side_panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "打开/关闭 TabFlow 侧边栏"
+    },
+    "open_popup_window": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "以独立窗口打开 TabFlow"
+    }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt9C+A5nNjdBBtKprkgRNNSvJTQ1e33zrpgyNelKLD8eRL/D0jbEb6CRUW/OjQsmjPO2A7g8KMJLcUoyBbep13oqLTskERYr+fUYhzzJT3sAky2lcq1IvVlj4dra8MLc8bNUbbuL/3GI1jho/rn85T2vu5yH1+ZLA6fohWSo2qhrbRQhfKMXeVipfGWNQnTM+aC8T3OAeF+jQDec1vRKoy+Ccp2kTCPaKfpzF2xR1G3uC11BWrfHulQXshUktJwjPOCoiozvUGJ2kWoM6UOgku/l2po/M6Noo2fU1TUtsb07MJLWKKIosuMgtSaYxGft1tmZa2JBYlMmNFbViMzurSQIDAQAB"
+}

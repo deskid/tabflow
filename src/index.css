@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/* Radix UI Colors Scales */
+@import "@radix-ui/colors/slate.css";
+@import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/blue.css";
+@import "@radix-ui/colors/blue-dark.css";
+@import "@radix-ui/colors/indigo.css";
+@import "@radix-ui/colors/indigo-dark.css";
+@import "@radix-ui/colors/red.css";
+@import "@radix-ui/colors/red-dark.css";
+@import "@radix-ui/colors/amber.css";
+@import "@radix-ui/colors/amber-dark.css";
+@import "@radix-ui/colors/green.css";
+@import "@radix-ui/colors/green-dark.css";
+@import "@radix-ui/colors/cyan.css";
+@import "@radix-ui/colors/cyan-dark.css";
+@import "@radix-ui/colors/purple.css";
+@import "@radix-ui/colors/purple-dark.css";
+@import "@radix-ui/colors/pink.css";
+@import "@radix-ui/colors/pink-dark.css";
+
+:root {
+  --app-bg: var(--slate-1);
+  --surface-subtle: var(--slate-2);
+  --surface: var(--slate-3);
+  --surface-hover: var(--slate-4);
+  --surface-active: var(--slate-5);
+  --border-subtle: var(--slate-6);
+  --border-interactive: var(--slate-7);
+  --text-high: var(--slate-12);
+  --text-medium: var(--slate-11);
+  --text-low: var(--slate-9);
+
+  --accent-subtle: var(--blue-3);
+  --accent-border: var(--blue-7);
+  --accent-solid: var(--blue-9);
+  --accent-text: var(--blue-11);
+
+  --danger-subtle: var(--red-3);
+  --danger-border: var(--red-7);
+  --danger-solid: var(--red-9);
+  --danger-text: var(--red-11);
+
+  --warning-subtle: var(--amber-3);
+  --warning-border: var(--amber-7);
+  --warning-text: var(--amber-11);
+
+  --success-subtle: var(--green-3);
+  --success-border: var(--green-7);
+  --success-text: var(--green-11);
+}
+
+@layer base {
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--app-bg);
+    color: var(--text-high);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    user-select: none;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* 0.5px hairline utilities */
+.border-hairline {
+  border-width: 0.5px;
+}
+.border-b-hairline {
+  border-bottom-width: 0.5px;
+}
+.border-t-hairline {
+  border-top-width: 0.5px;
+}
+.border-l-hairline {
+  border-left-width: 0.5px;
+}
+.border-r-hairline {
+  border-right-width: 0.5px;
+}
+
+/* Minimal scrollbar with Radix Slate colors */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--slate-7);
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--slate-8);
+}

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Vibrant Electric Cyan-to-Indigo Badge Gradient -->
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F2FE" />
+      <stop offset="50%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+  </defs>
+
+  <!-- Solid Vibrant Squircle Container -->
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#badgeGrad)" />
+
+  <!-- Crisp White Negative Space Glyph: Vertical Sidebar + Cascading Tabs -->
+  <!-- Left Spine (Vertical Rail) -->
+  <rect x="28" y="28" width="16" height="72" rx="8" fill="#FFFFFF" />
+
+  <!-- Tab 1 (Top Active) -->
+  <rect x="50" y="30" width="50" height="20" rx="7" fill="#FFFFFF" />
+
+  <!-- Tab 2 (Middle) -->
+  <rect x="50" y="56" width="40" height="18" rx="6" fill="#FFFFFF" fill-opacity="0.8" />
+
+  <!-- Tab 3 (Bottom) -->
+  <rect x="50" y="80" width="32" height="16" rx="6" fill="#FFFFFF" fill-opacity="0.6" />
+</svg>
