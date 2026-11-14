@@ -8,7 +8,7 @@ export interface ReadingEntry {
   updateTime?: number;
 }
 
-export function useReadingList() {
+export function useReadingList(targetWindowId?: number | null) {
   const [entries, setEntries] = useState<ReadingEntry[]>([]);
   const [unreadEntries, setUnreadEntries] = useState<ReadingEntry[]>([]);
   const [readEntries, setReadEntries] = useState<ReadingEntry[]>([]);
@@ -93,8 +93,10 @@ export function useReadingList() {
   };
 
   const openEntry = async (url: string, newTab = true) => {
+    if (targetWindowId === null) return;
     if (newTab) {
-      await chrome.tabs.create({ url, active: true });
+      await chrome.tabs.create({ url, active: true, ...(targetWindowId === undefined ? {} : { windowId: targetWindowId }) });
+      if (targetWindowId !== undefined) await chrome.windows.update(targetWindowId, { focused: true });
     }
   };
 

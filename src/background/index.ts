@@ -1,4 +1,17 @@
 // Background Service Worker for TabFlow
+import { createSettingsWriter } from '../services/settingsStore';
+import type { SettingsPatch } from '../services/settingsStore';
+
+const writeSettings = createSettingsWriter();
+const windowQueues = new Map<number, Promise<void>>();
+
+function enqueueWindow(windowId: number, task: () => Promise<void>): Promise<void> {
+  const pending = (windowQueues.get(windowId) ?? Promise.resolve()).then(task);
+  const settled = pending.catch((error) => console.warn('Auto-group new tab error:', error));
+  windowQueues.set(windowId, settled);
+  void settled.then(() => { if (windowQueues.get(windowId) === settled) windowQueues.delete(windowId); });
+  return settled;
+}
 
 const CATEGORIES: Array<{
   name: string;
@@ -105,132 +118,70 @@ function matchCategory(url: string, title: string) {
   return null;
 }
 
-const processingTabs = new Set<number>();
+function eligibleTab(tab: chrome.tabs.Tab, windowId: number, url: string): boolean {
+  return tab.windowId === windowId && tab.url === url && !tab.pinned &&
+    (tab.groupId === undefined || tab.groupId === -1) && /^https?:\/\//.test(url);
+}
+
+async function freshTab(tabId: number, windowId: number, url: string) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return eligibleTab(tab, windowId, url) ? tab : null;
+  } catch { return null; }
+}
+
+function hostOf(url?: string) {
+  try { return new URL(url ?? '').hostname.replace(/^(www\.|m\.)/, ''); }
+  catch { return ''; }
+}
 
 async function handleAutoGroupNewTab(tabId: number) {
-  if (processingTabs.has(tabId)) return;
-  processingTabs.add(tabId);
-
-  try {
-    let tab: chrome.tabs.Tab;
-    try {
-      tab = await chrome.tabs.get(tabId);
-    } catch {
-      return;
-    }
-
-    if (!tab || !tab.id || !tab.windowId || tab.pinned) return;
-
-    // Ignore browser internal or blank pages
-    if (
-      !tab.url ||
-      tab.url.startsWith('chrome://') ||
-      tab.url.startsWith('edge://') ||
-      tab.url.startsWith('about:') ||
-      tab.url.startsWith('chrome-extension://') ||
-      tab.url.startsWith('devtools://')
-    ) {
-      return;
-    }
-
-    // Skip if already in a valid group
-    const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
-    if (tab.groupId !== undefined && tab.groupId !== -1 && tab.groupId !== noneGroupId) {
-      return;
-    }
-
-    // Check user preference
-    const settings = await new Promise<{ autoGroupNewTabs?: boolean }>((resolve) => {
-      chrome.storage.sync.get('sidetab_settings', (res) => {
-        resolve(res?.sidetab_settings || {});
-      });
-    });
-
-    if (settings.autoGroupNewTabs === false) {
-      return;
-    }
-
-    let host = '';
-    try {
-      host = new URL(tab.url).hostname.replace(/^(www\.|m\.)/, '');
-    } catch {
-      return;
-    }
+  let initial: chrome.tabs.Tab;
+  try { initial = await chrome.tabs.get(tabId); } catch { return; }
+  const windowId = initial.windowId;
+  const url = initial.url ?? '';
+  if (!eligibleTab(initial, windowId, url)) return;
+  return enqueueWindow(windowId, async () => {
+    const tab = await freshTab(tabId, windowId, url);
+    if (!tab) return;
+    const settings = await chrome.storage.sync.get<{ sidetab_settings?: { autoGroupNewTabs?: boolean } }>('sidetab_settings');
+    if (settings.sidetab_settings?.autoGroupNewTabs === false) return;
+    const host = hostOf(url);
     if (!host) return;
-
-    const category = matchCategory(tab.url, tab.title || '');
-    const windowTabs = await chrome.tabs.query({ windowId: tab.windowId });
-    const existingGroups = await chrome.tabGroups.query({ windowId: tab.windowId });
-
-    // 1. Join an existing group if domain, title, or category matches
+    const category = matchCategory(url, tab.title || '');
+    const windowTabs = await chrome.tabs.query({ windowId });
+    const existingGroups = await chrome.tabGroups.query({ windowId });
     for (const group of existingGroups) {
-      const tabsInGroup = windowTabs.filter((t) => t.groupId === group.id);
-      const hasSameDomain = tabsInGroup.some((t) => t.url && t.url.includes(host));
+      const tabsInGroup = windowTabs.filter((candidate) => candidate.groupId === group.id);
+      const hasSameDomain = tabsInGroup.some((candidate) => hostOf(candidate.url) === host);
       const hostMain = host.split('.')[0];
-      const titleMatches = group.title && hostMain.length > 2 && (group.title.toLowerCase().includes(hostMain) || host.includes(group.title.toLowerCase()));
-      const categoryMatches = category && group.title && (group.title.includes(category.name) || category.name.includes(group.title));
-
+      const titleMatches = group.title && hostMain.length > 2 &&
+        (group.title.toLowerCase().includes(hostMain) || host.includes(group.title.toLowerCase()));
+      const categoryMatches = category && group.title &&
+        (group.title.includes(category.name) || category.name.includes(group.title));
       if (hasSameDomain || titleMatches || categoryMatches) {
-        await chrome.tabs.group({ tabIds: [tab.id], groupId: group.id });
+        if (!await freshTab(tabId, windowId, url)) return;
+        // Recheck the destination, too: it can be removed/moved while querying tabs.
+        const destination = await chrome.tabGroups.get(group.id);
+        if (destination.windowId !== windowId || !await freshTab(tabId, windowId, url)) return;
+        await chrome.tabs.group({ tabIds: [tabId], groupId: group.id });
         return;
       }
     }
-
-    // 2. If no existing group, check for another ungrouped tab of the same domain
-    const otherUngrouped = windowTabs.filter(
-      (t) =>
-        t.id !== tab.id &&
-        !t.pinned &&
-        (t.groupId === undefined || t.groupId === -1 || t.groupId === noneGroupId) &&
-        t.url &&
-        !t.url.startsWith('chrome://') &&
-        !t.url.startsWith('about:')
-    );
-
-    const sameDomainTab = otherUngrouped.find((t) => t.url && t.url.includes(host));
-    if (sameDomainTab && sameDomainTab.id) {
-      const newGroupId = await chrome.tabs.group({
-        tabIds: [sameDomainTab.id, tab.id] as [number, ...number[]],
-      });
-      const groupTitle = formatDomainName(host);
-      const groupColor = pickColorByHost(host);
-      await chrome.tabGroups.update(newGroupId, {
-        title: groupTitle,
-        color: groupColor,
-        collapsed: false,
-      });
-      return;
-    }
-
-    // 3. Auto-create a group for this new tab based on category or domain
-    if (category) {
-      const newGroupId = await chrome.tabs.group({
-        tabIds: [tab.id] as [number, ...number[]],
-      });
-      await chrome.tabGroups.update(newGroupId, {
-        title: category.name,
-        color: category.color,
-        collapsed: false,
-      });
-      return;
-    }
-
-    // 4. Default: create group with domain title
-    const newGroupId = await chrome.tabs.group({
-      tabIds: [tab.id] as [number, ...number[]],
-    });
+    const peer = windowTabs.find((candidate) => candidate.id !== tabId &&
+      candidate.id !== undefined && eligibleTab(candidate, windowId, candidate.url ?? '') &&
+      hostOf(candidate.url) === host);
+    const tabIds: [number, ...number[]] = [tabId];
+    if (peer?.id !== undefined && await freshTab(peer.id, windowId, peer.url ?? '')) tabIds.push(peer.id);
+    // The last check is deliberately after every asynchronous preparation step.
+    if (!await freshTab(tabId, windowId, url)) return;
+    const newGroupId = await chrome.tabs.group({ tabIds });
     await chrome.tabGroups.update(newGroupId, {
-      title: formatDomainName(host),
-      color: pickColorByHost(host),
+      title: tabIds.length > 1 ? formatDomainName(host) : category?.name ?? formatDomainName(host),
+      color: tabIds.length > 1 ? pickColorByHost(host) : category?.color ?? pickColorByHost(host),
       collapsed: false,
     });
-  } catch (err) {
-    console.warn('Auto-group new tab error:', err);
-  } finally {
-    setTimeout(() => {
-      processingTabs.delete(tabId);
-    }, 1500);
-  }
+  });
 }
 
 // 1. Extension lifecycle and side panel setup
@@ -296,41 +247,50 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 // 3. Handle commands (keyboard shortcuts)
-chrome.commands.onCommand.addListener(async (command) => {
+chrome.commands.onCommand.addListener((command) => {
   if (command === 'open_popup_window') {
-    openStandaloneWindow();
+    void openStandaloneWindow().catch((error) => console.warn('Open standalone window error:', error));
   }
 });
 
-// 4. Handle messages from Sidepanel or Popup
+// 4. Keep the response channel open until storage/window operations really finish.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  let operation: Promise<unknown>;
   if (message.action === 'OPEN_STANDALONE_WINDOW') {
-    openStandaloneWindow(message.windowId);
-    sendResponse({ success: true });
-    return true;
-  }
+    operation = openStandaloneWindow(message.windowId).then((window) => ({ windowId: window.id }));
+  } else if (message.action === 'UPDATE_SETTINGS' || message.action === 'UPDATE_AI_SETTINGS') {
+    operation = writeSettings(message as SettingsPatch).then((settings) => ({ settings }));
+  } else { return; }
+  void operation.then((result) => sendResponse({ success: true, ...(result as object) }))
+    .catch((error) => sendResponse({ success: false, error: String(error.message ?? error) }));
+  return true;
 });
 
-async function openStandaloneWindow(currentWindowId?: number) {
-  let targetWindow = null;
-  if (currentWindowId) {
-    try {
-      targetWindow = await chrome.windows.get(currentWindowId);
-    } catch {
-      // ignore
-    }
+async function openStandaloneWindow(sourceWindowId?: number) {
+  let source: chrome.windows.Window;
+  if (sourceWindowId !== undefined) {
+    if (!Number.isInteger(sourceWindowId) || sourceWindowId < 0) throw new Error('来源浏览器窗口 ID 无效。');
+    try { source = await chrome.windows.get(sourceWindowId); }
+    catch { throw new Error('来源浏览器窗口已关闭或不可访问。'); }
+  } else {
+    try { source = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }); }
+    catch { throw new Error('无法确定来源浏览器窗口，请从普通浏览器窗口打开 TabFlow。'); }
   }
-
-  const left = targetWindow && targetWindow.left !== undefined ? targetWindow.left + 20 : 100;
-  const top = targetWindow && targetWindow.top !== undefined ? targetWindow.top + 60 : 100;
-
-  chrome.windows.create({
-    url: 'popup.html',
-    type: 'popup',
-    width: 380,
-    height: 750,
-    left,
-    top,
+  if (source.type !== 'normal' || source.id === undefined) {
+    throw new Error('来源必须是普通浏览器窗口，请从普通浏览器窗口打开 TabFlow。');
+  }
+  // Verify again before creating the popup if the source closed during resolution.
+  try {
+    const current = await chrome.windows.get(source.id);
+    if (current.type !== 'normal') throw new Error('not normal');
+  } catch { throw new Error('来源浏览器窗口已关闭或不可访问。'); }
+  const popup = await chrome.windows.create({
+    url: 'popup.html?windowId=' + source.id,
+    type: 'popup', width: 380, height: 750,
+    left: source.left !== undefined ? source.left + 20 : 100,
+    top: source.top !== undefined ? source.top + 60 : 100,
     focused: true,
   });
+  if (!popup || popup.id === undefined) throw new Error('浏览器未返回新建独立窗口。');
+  return popup;
 }

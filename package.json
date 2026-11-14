@@ -1,15 +1,19 @@
 {
   "name": "tabflow",
   "version": "1.0.0",
-  "description": "",
+  "description": "Chrome vertical tabs, tab grouping and reading list with optional AI classification",
   "main": "index.js",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "test": "node scripts/test.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": { "node": ">=24.0.0" },
   "devEngines": {
     "packageManager": {
       "name": "pnpm",

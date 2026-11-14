@@ -3,3 +3,14 @@ dist
 .DS_Store
 *.local
 .extension-key.json
+.pnpm-store/
+artifacts/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+tabflow-codex-bridge.cmd
+com.tabflow.codex_bridge.json

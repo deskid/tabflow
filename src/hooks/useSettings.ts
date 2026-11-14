@@ -1,96 +1,55 @@
-import { useState, useEffect } from 'react';
-import { AISettings, DEFAULT_GROUPING_PROMPT } from '../services/aiGrouper';
-
-export interface UserSettings {
-  theme: 'system' | 'dark' | 'light';
-  density: 'comfortable' | 'compact';
-  showFavicon: boolean;
-  showDuplicateCount: boolean;
-  autoGroupNewTabs: boolean;
-  aiSettings: AISettings;
-}
-
-const DEFAULT_SETTINGS: UserSettings = {
-  theme: 'system',
-  density: 'comfortable',
-  showFavicon: true,
-  showDuplicateCount: true,
-  autoGroupNewTabs: true,
-  aiSettings: {
-    provider: 'codex_native',
-    apiKey: '',
-    apiEndpoint: '',
-    model: 'antigravity/gemini-3.8-flash',
-    customPrompt: DEFAULT_GROUPING_PROMPT,
-  },
-};
+import { useState, useEffect, useRef } from 'react';
+import type { AISettings } from '../services/aiGrouper';
+import { DEFAULT_SETTINGS, applySettingsPatch, observeSettings, observeDevSettings, sendSettingsPatch } from '../services/settingsStore';
+import type { UserSettings, SettingsPatch } from '../services/settingsStore';
+export type { UserSettings } from '../services/settingsStore';
 
 export function useSettings() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const current = useRef(settings);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!chrome.storage?.sync) {
+    const receive = (next: UserSettings) => { current.current = next; setSettings(next); };
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
+      const unsubscribe = observeDevSettings(receive);
       setLoaded(true);
-      return;
+      return unsubscribe;
     }
-
-    chrome.storage.sync.get('sidetab_settings', (res: { [key: string]: any }) => {
-      if (res?.sidetab_settings) {
-        const saved = res.sidetab_settings as Partial<UserSettings>;
-        setSettings({
-          ...DEFAULT_SETTINGS,
-          ...saved,
-          aiSettings: {
-            ...DEFAULT_SETTINGS.aiSettings,
-            ...(saved.aiSettings || {}),
-          },
-        });
-      }
+    try {
+      return observeSettings(receive, () => setLoaded(true), setError);
+    } catch (reason) {
+      setError(String(reason instanceof Error ? reason.message : reason));
       setLoaded(true);
-    });
+    }
   }, []);
 
-  const updateSettings = (updates: Partial<UserSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...updates };
-      if (chrome.storage?.sync) {
-        chrome.storage.sync.set({ sidetab_settings: next }).catch(() => {});
-      }
-      return next;
-    });
+  const update = (request: SettingsPatch) => {
+    setError(null);
+    // Keep the target stable for consecutive edits before React renders again.
+    try {
+      const next = applySettingsPatch(current.current, request);
+      current.current = next;
+      setSettings(next);
+      void sendSettingsPatch(request).catch((reason) => setError(String(reason.message ?? reason)));
+    } catch (reason) { setError(String(reason instanceof Error ? reason.message : reason)); }
   };
-
-  const updateAISettings = (aiUpdates: Partial<AISettings>) => {
-    setSettings((prev) => {
-      const next: UserSettings = {
-        ...prev,
-        aiSettings: { ...prev.aiSettings, ...aiUpdates },
-      };
-      if (chrome.storage?.sync) {
-        chrome.storage.sync.set({ sidetab_settings: next }).catch(() => {});
-      }
-      return next;
-    });
-  };
+  const updateSettings = (updates: Partial<UserSettings>) => update({
+    action: 'UPDATE_SETTINGS', patch: updates,
+    targetProvider: updates.aiSettings?.provider ?? settings.aiSettings.provider,
+  });
+  const updateAISettings = (patch: Partial<AISettings>) => update({
+    action: 'UPDATE_AI_SETTINGS', patch,
+    targetProvider: patch.provider ?? settings.aiSettings.provider,
+  });
 
   useEffect(() => {
     const root = document.documentElement;
-    const isDark =
-      settings.theme === 'dark' ||
+    const isDark = settings.theme === 'dark' ||
       (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-    if (isDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    root.classList.toggle('dark', isDark);
   }, [settings.theme]);
 
-  return {
-    settings,
-    loaded,
-    updateSettings,
-    updateAISettings,
-  };
+  return { settings, loaded, error, updateSettings, updateAISettings };
 }

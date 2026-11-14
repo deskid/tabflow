@@ -1,5 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { useTabsManager } from './hooks/useTabsManager';
+import React, { useEffect, useState, useMemo, useSyncExternalStore } from 'react';
+import { cancelBuiltinModel, checkBuiltinModel, getBuiltinModelState, subscribeBuiltinModel } from './services/builtinModel';
+import { BuiltinModelStatus } from './components/BuiltinModelStatus';
+import { useTabsManager, type GroupingExecutionResult } from './hooks/useTabsManager';
+import { GroupingResultNotice } from './components/GroupingResultNotice';
 import { useBookmarks } from './hooks/useBookmarks';
 import { useReadingList } from './hooks/useReadingList';
 import { useSettings } from './hooks/useSettings';
@@ -19,14 +22,21 @@ export const App: React.FC = () => {
   const [currentTabType, setCurrentTabType] = useState<MainTabType>('tabs');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [groupingError, setGroupingError] = useState('');
+  const [windowActionError, setWindowActionError] = useState('');
+  const [groupingResult, setGroupingResult] = useState<GroupingExecutionResult | null>(null);
   const [draggedTabId, setDraggedTabId] = useState<number | null>(null);
 
   const {
     tabs,
     groups,
     activeTabId,
+    currentWindowId,
+    windowError,
+    undoError,
     selectedTabIds,
     isGrouping,
+    isUndoing,
     undoToastVisible,
     dismissUndoToast,
     activateTab,
@@ -43,7 +53,6 @@ export const App: React.FC = () => {
     closeGroup,
     ungroupGroup,
     groupSelectedTabs,
-    groupByDomain,
     groupWithAI,
     undoGrouping,
     findDuplicates,
@@ -61,7 +70,7 @@ export const App: React.FC = () => {
     openBookmark,
     deleteBookmark,
     saveTabsAsFolder,
-  } = useBookmarks();
+  } = useBookmarks(currentWindowId);
 
   const {
     entries: readingEntries,
@@ -72,9 +81,27 @@ export const App: React.FC = () => {
     toggleRead,
     removeEntry: removeReadingEntry,
     openEntry: openReadingEntry,
-  } = useReadingList();
+  } = useReadingList(currentWindowId);
 
-  const { settings, updateSettings, updateAISettings } = useSettings();
+  const { settings, updateSettings, updateAISettings, error: settingsError } = useSettings();
+  const builtinState = useSyncExternalStore(subscribeBuiltinModel, getBuiltinModelState);
+  const builtinBusy = builtinState.busy === true;
+  useEffect(() => {
+    if (settings.aiSettings.provider === 'chrome_builtin' && !getBuiltinModelState().busy) {
+      void checkBuiltinModel().catch(() => {});
+    }
+  }, [settings.aiSettings.provider]);
+  useEffect(() => {
+    if (settings.aiSettings.provider !== 'chrome_builtin' && builtinBusy) cancelBuiltinModel();
+  }, [settings.aiSettings.provider, builtinBusy]);
+  useEffect(() => {
+    if (windowError && isGrouping && builtinBusy) cancelBuiltinModel();
+  }, [windowError, isGrouping, builtinBusy]);
+  const builtinBatchProgress = builtinState.totalTabs ? ` ${builtinState.completedTabs || 0}/${builtinState.totalTabs}` : '';
+  const builtinGroupingLabel = builtinState.status === 'downloading'
+    ? `下载中${builtinState.progress === undefined ? '' : ` ${Math.round(builtinState.progress * 100)}%`}`
+    : builtinState.status === 'checking' ? '检测中'
+      : builtinState.status === 'preparing' && !builtinState.completedTabs ? '初始化' : `整理中${builtinBatchProgress}`;
 
   // Search handler
   const handleSearchChange = (q: string) => {
@@ -116,8 +143,15 @@ export const App: React.FC = () => {
   };
 
   // Open standalone popup window
-  const handleOpenStandalone = () => {
-    chrome.runtime.sendMessage({ action: 'OPEN_STANDALONE_WINDOW' });
+  const handleOpenStandalone = async () => {
+    if (currentWindowId === null) return;
+    setWindowActionError('');
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'OPEN_STANDALONE_WINDOW', windowId: currentWindowId });
+      if (!response?.success) throw new Error(response?.error || '无法打开独立窗口，请重试。');
+    } catch (error) {
+      setWindowActionError(error instanceof Error ? error.message : '无法打开独立窗口，请重试。');
+    }
   };
 
   // Filter tabs by search
@@ -174,12 +208,42 @@ export const App: React.FC = () => {
       <Header
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
-        onTriggerAI={() => groupWithAI(settings.aiSettings)}
-        onTriggerDomainGroup={groupByDomain}
+        onTriggerAI={async () => {
+          setGroupingError('');
+          setGroupingResult(null);
+          try {
+            const result = await groupWithAI(settings.aiSettings);
+            if (result) setGroupingResult(result);
+          } catch (error) {
+            if (!(error instanceof Error && error.name === 'AbortError')) {
+              setGroupingError(error instanceof Error ? error.message : 'AI 分类失败，请检查设置后重试。');
+            }
+          }
+        }}
         onOpenStandalone={handleOpenStandalone}
-        onOpenSettings={() => setIsSettingsOpen(false ? false : true)}
-        isGrouping={isGrouping}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        isGrouping={isGrouping || isUndoing || (settings.aiSettings.provider === 'chrome_builtin' && builtinBusy)}
+        groupingLabel={isUndoing ? '恢复中' : settings.aiSettings.provider === 'chrome_builtin' ? builtinGroupingLabel : undefined}
+        targetAvailable={currentWindowId !== null}
       />
+
+      {(windowError || windowActionError) && <div role="alert" className="px-3 py-2 text-[12px] bg-[var(--surface)] border-b border-[var(--border-subtle)]">
+        <p className="break-words">{windowError || windowActionError}</p>
+        {!windowError && <button type="button" onClick={() => setWindowActionError('')} className="text-[var(--accent-text)]">关闭</button>}
+      </div>}
+
+      {settings.aiSettings.provider === 'chrome_builtin' && builtinBusy && <BuiltinModelStatus compact />}
+
+      {groupingResult && <GroupingResultNotice result={groupingResult}
+        onSettings={() => setIsSettingsOpen(true)} onDismiss={() => setGroupingResult(null)} />}
+
+      {groupingError && (
+        <div role="alert" className="px-3 py-2 text-[12px] bg-[var(--surface)] border-b border-[var(--border-subtle)]">
+          <p className="break-words">{groupingError}</p>
+          <button type="button" onClick={() => setIsSettingsOpen(true)} className="mr-3 text-[var(--accent-text)]">检查 AI 设置</button>
+          <button type="button" onClick={() => setGroupingError('')}>关闭</button>
+        </div>
+      )}
 
       {/* Navigation Sub-Tabs */}
       <NavTabs
@@ -192,6 +256,9 @@ export const App: React.FC = () => {
       {/* Undo Toast */}
       <UndoToast
         visible={undoToastVisible}
+        busy={isUndoing}
+        disabled={isGrouping}
+        error={undoError}
         onUndo={undoGrouping}
         onDismiss={dismissUndoToast}
       />
@@ -346,6 +413,7 @@ export const App: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
+        error={settingsError}
         onUpdateSettings={updateSettings}
         onUpdateAISettings={updateAISettings}
       />

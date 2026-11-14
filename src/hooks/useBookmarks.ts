@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export function useBookmarks() {
+export function useBookmarks(targetWindowId?: number | null) {
   const [bookmarkTree, setBookmarkTree] = useState<chrome.bookmarks.BookmarkTreeNode[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<chrome.bookmarks.BookmarkTreeNode[]>([]);
@@ -64,14 +64,14 @@ export function useBookmarks() {
   };
 
   const openBookmark = async (url: string, newTab = true) => {
+    if (targetWindowId === null) return;
     if (newTab) {
-      await chrome.tabs.create({ url, active: true });
+      await chrome.tabs.create({ url, active: true, ...(targetWindowId === undefined ? {} : { windowId: targetWindowId }) });
     } else {
-      const current = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (current[0]?.id) {
-        await chrome.tabs.update(current[0].id, { url });
-      }
+      const current = await chrome.tabs.query({ active: true, ...(targetWindowId === undefined ? { currentWindow: true } : { windowId: targetWindowId }) });
+      if (current[0]?.id) await chrome.tabs.update(current[0].id, { url });
     }
+    if (targetWindowId !== undefined) await chrome.windows.update(targetWindowId, { focused: true });
   };
 
   const deleteBookmark = async (id: string) => {

@@ -1,51 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { X, Moon, Sun, Monitor, LayoutGrid, List, Sparkles, Key, Check, CheckCircle2, RotateCcw, Cpu } from 'lucide-react';
+import React from 'react';
+import { X, Moon, Sun, Monitor, LayoutGrid, List, RotateCcw } from 'lucide-react';
 import { UserSettings } from '../hooks/useSettings';
-import { getLocalCodexAccount, getLocalCodexModels, DEFAULT_GROUPING_PROMPT } from '../services/aiGrouper';
+import { DEFAULT_GROUPING_PROMPT, type AISettings } from '../services/aiGrouper';
+import { AIProviderSettings } from './AIProviderSettings';
+import { GROUPING_PROMPT_PRESETS } from '../services/groupingPresets';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: UserSettings;
+  error?: string | null;
   onUpdateSettings: (updates: Partial<UserSettings>) => void;
-  onUpdateAISettings: (aiUpdates: any) => void;
+  onUpdateAISettings: (aiUpdates: Partial<AISettings>) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   settings,
+  error,
   onUpdateSettings,
   onUpdateAISettings,
 }) => {
-  const [codexAccount, setCodexAccount] = useState<{ loggedIn: boolean; email?: string } | null>(null);
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([]);
-
-  useEffect(() => {
-    if (isOpen) {
-      getLocalCodexAccount().then(setCodexAccount);
-      getLocalCodexModels().then((models) => {
-        if (models && models.length > 0) {
-          setAvailableModels(models);
-        }
-      });
-    }
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   const { theme, density, autoGroupNewTabs, aiSettings } = settings;
-
-  const modelOptions = availableModels.length > 0 ? availableModels : [
-    { id: 'antigravity/gemini-3.8-flash', name: 'Gemini 3.8 Flash (推荐/极速)' },
-    { id: 'deepseek/deepseek-flash', name: 'DeepSeek V4.1 Flash' },
-    { id: 'auto/gpt-6-astra', name: 'GPT-6 Astra' },
-    { id: 'auto/gpt-6.1-sol', name: 'GPT-6.1 Sol' },
-    { id: 'antigravity/claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
-  ];
-
-  const currentModel = aiSettings.model || 'antigravity/gemini-3.8-flash';
   const currentPrompt = aiSettings.customPrompt ?? DEFAULT_GROUPING_PROMPT;
+  const currentPreset = currentPrompt === DEFAULT_GROUPING_PROMPT ? 'default'
+    : GROUPING_PROMPT_PRESETS.find((preset) => preset.prompt === currentPrompt)?.id || 'custom';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 select-none">
@@ -63,6 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="py-3 space-y-3.5 max-h-[75vh] overflow-y-auto scrollbar-thin">
+          {error && <p role="alert" className="break-words text-[12px] text-[var(--text-medium)]">{error}</p>}
           {/* Theme */}
           <div>
             <label className="font-medium block mb-1 text-[12px] text-[var(--text-medium)]">外观主题</label>
@@ -103,7 +86,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }`}
               >
                 <LayoutGrid size={13} />
-                <span>舒适 (36px)</span>
+                <span>舒适</span>
               </button>
 
               <button
@@ -116,7 +99,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }`}
               >
                 <List size={13} />
-                <span>紧凑 (28px)</span>
+                <span>紧凑</span>
               </button>
             </div>
           </div>
@@ -125,7 +108,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex items-center justify-between p-2 rounded-md bg-[var(--surface)] border-hairline border-[var(--border-subtle)]">
             <div>
               <div className="font-medium text-[13px] text-[var(--text-high)]">新标签页自动归类</div>
-              <div className="text-[12px] text-[var(--text-medium)]">打开新页面时自动归入匹配的标签组</div>
+
             </div>
             <button
               type="button"
@@ -140,145 +123,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div className="h-hairline bg-[var(--border-subtle)]" />
 
-          {/* AI Provider */}
-          <div>
-            <div className="flex items-center gap-1.5 font-medium text-[12px] text-[var(--text-medium)] mb-1.5">
-              <Sparkles size={13} className="text-[var(--accent-text)]" />
-              <span>自动分类引擎</span>
-            </div>
+          <AIProviderSettings active={isOpen} settings={aiSettings} onUpdate={onUpdateAISettings} />
 
-            <div className="space-y-1 mb-2.5">
-              {[
-                { id: 'codex_native', label: '本机已登录 Codex 账号 (免授权桥接)' },
-                { id: 'heuristic', label: '本地启发式 (免配置)' },
-                { id: 'chrome_builtin', label: 'Chrome 端侧模型 (Gemini Nano)' },
-                { id: 'deepseek', label: 'DeepSeek API' },
-                { id: 'openai', label: 'OpenAI API' },
-                { id: 'custom', label: '自定义端点 (Ollama / 兼容接口)' },
-              ].map((opt) => (
-                <div
-                  key={opt.id}
-                  onClick={() => onUpdateAISettings({ provider: opt.id })}
-                  className={`px-2.5 py-1.5 rounded-md border-hairline cursor-pointer transition-colors duration-150 ease-out flex items-center justify-between ${
-                    aiSettings.provider === opt.id
-                      ? 'border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent-text)] font-medium'
-                      : 'border-[var(--border-subtle)] hover:bg-[var(--surface-hover)] text-[var(--text-high)]'
-                  }`}
+          {aiSettings.provider !== 'heuristic' && <>
+            <div className="h-hairline bg-[var(--border-subtle)]" />
+
+            {/* Grouping style and editable prompt */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="grouping-style" className="font-medium text-[12px] text-[var(--text-medium)]">
+                  分组风格
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onUpdateAISettings({ customPrompt: DEFAULT_GROUPING_PROMPT })}
+                  title="重置为默认提示词"
+                  className="flex items-center gap-1 text-[12px] text-[var(--accent-text)] hover:underline transition-colors duration-150 ease-out"
                 >
-                  <span className="text-[13px]">{opt.label}</span>
-                  {aiSettings.provider === opt.id && <Check size={14} className="text-[var(--accent-text)] shrink-0" />}
-                </div>
-              ))}
-            </div>
-
-            {/* Native Codex Settings (Account + Model Picker) */}
-            {aiSettings.provider === 'codex_native' && (
-              <div className="space-y-2 p-2 rounded-md bg-[var(--surface)] border-hairline border-[var(--border-subtle)]">
-                {/* Account status */}
-                <div className="flex items-center gap-2 text-[12px]">
-                  <CheckCircle2 size={14} className="text-[var(--success-text)] shrink-0" />
-                  <div className="truncate flex-1">
-                    <span className="font-medium text-[var(--text-high)]">
-                      {codexAccount?.loggedIn ? `已连接本机: ${codexAccount.email}` : '本机 Codex 桥接就绪'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Model Selector */}
-                <div>
-                  <div className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-medium)] mb-1">
-                    <Cpu size={12} className="text-[var(--accent-text)]" />
-                    <span>推理模型</span>
-                  </div>
-                  <select
-                    value={currentModel}
-                    onChange={(e) => onUpdateAISettings({ model: e.target.value })}
-                    className="w-full px-2 py-1.5 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[12px] text-[var(--text-high)] outline-none cursor-pointer"
-                  >
-                    {modelOptions.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name || m.id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <RotateCcw size={11} />
+                  <span>恢复默认</span>
+                </button>
               </div>
-            )}
 
-            {/* Cloud Credentials */}
-            {(aiSettings.provider === 'openai' || aiSettings.provider === 'deepseek' || aiSettings.provider === 'custom') && (
-              <div className="space-y-2 p-2 rounded-md bg-[var(--surface-subtle)] border-hairline border-[var(--border-subtle)]">
-                <div>
-                  <label className="block text-[12px] font-medium text-[var(--text-medium)] mb-1">API Key</label>
-                  <div className="relative flex items-center">
-                    <Key size={12} className="absolute left-2.5 text-[var(--text-medium)]" />
-                    <input
-                      type="password"
-                      placeholder="sk-..."
-                      value={aiSettings.apiKey || ''}
-                      onChange={(e) => onUpdateAISettings({ apiKey: e.target.value })}
-                      className="w-full pl-7 pr-2.5 py-1 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[12px] text-[var(--text-high)] outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-[var(--text-medium)] mb-1">模型名称</label>
-                  <input
-                    type="text"
-                    placeholder={aiSettings.provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini'}
-                    value={aiSettings.model || ''}
-                    onChange={(e) => onUpdateAISettings({ model: e.target.value })}
-                    className="w-full px-2.5 py-1 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[12px] text-[var(--text-high)] outline-none"
-                  />
-                </div>
-
-                {aiSettings.provider === 'custom' && (
-                  <div>
-                    <label className="block text-[12px] font-medium text-[var(--text-medium)] mb-1">接口 URL</label>
-                    <input
-                      type="text"
-                      placeholder="http://localhost:11434/v1/chat/completions"
-                      value={aiSettings.apiEndpoint || ''}
-                      onChange={(e) => onUpdateAISettings({ apiEndpoint: e.target.value })}
-                      className="w-full px-2.5 py-1 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[12px] text-[var(--text-high)] outline-none"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="h-hairline bg-[var(--border-subtle)]" />
-
-          {/* Custom Grouping Prompt Section */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="font-medium text-[12px] text-[var(--text-medium)]">
-                自定义分组提示词
-              </label>
-              <button
-                type="button"
-                onClick={() => onUpdateAISettings({ customPrompt: DEFAULT_GROUPING_PROMPT })}
-                title="重置为默认提示词"
-                className="flex items-center gap-1 text-[12px] text-[var(--accent-text)] hover:underline transition-colors duration-150 ease-out"
+              <select
+                id="grouping-style"
+                value={currentPreset}
+                onChange={(event) => {
+                  const preset = GROUPING_PROMPT_PRESETS.find((item) => item.id === event.target.value);
+                  if (event.target.value === 'default') onUpdateAISettings({ customPrompt: DEFAULT_GROUPING_PROMPT });
+                  else if (preset) onUpdateAISettings({ customPrompt: preset.prompt });
+                }}
+                className="w-full min-w-0 mb-1.5 px-2.5 py-2 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[13px] text-[var(--text-high)] outline-none"
               >
-                <RotateCcw size={11} />
-                <span>恢复默认</span>
-              </button>
-            </div>
+                <option value="default">默认</option>
+                {GROUPING_PROMPT_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                {currentPreset === 'custom' && <option value="custom">自定义</option>}
+              </select>
 
-            <textarea
-              rows={4}
-              value={currentPrompt}
-              onChange={(e) => onUpdateAISettings({ customPrompt: e.target.value })}
-              placeholder="输入自定义标签分组规则..."
-              className="w-full p-2 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[12px] text-[var(--text-high)] placeholder-[var(--text-low)] outline-none leading-relaxed resize-y scrollbar-thin transition-colors duration-150 ease-out"
-            />
-            <div className="text-[12px] text-[var(--text-medium)] mt-1">
-              可指定分类偏好（如：按业务项目 KAL / ATK 分组、限制组数、定制组名风格）
+              <textarea
+                aria-label="分组提示词"
+                rows={4}
+                value={currentPrompt}
+                onChange={(e) => onUpdateAISettings({ customPrompt: e.target.value })}
+                placeholder="输入自定义标签分组规则..."
+                className="w-full p-2 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[12px] text-[var(--text-high)] placeholder-[var(--text-low)] outline-none leading-relaxed resize-y scrollbar-thin transition-colors duration-150 ease-out"
+              />
+
             </div>
-          </div>
+          </>}
         </div>
 
         {/* Footer */}

@@ -1,26 +1,27 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, Sparkles, ExternalLink, Settings, X, Globe2, Bot } from 'lucide-react';
+import React, { useRef, useEffect } from 'react';
+import { Search, Sparkles, ExternalLink, Settings, X } from 'lucide-react';
 
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onTriggerAI: () => void;
-  onTriggerDomainGroup: () => void;
   onOpenStandalone: () => void;
   onOpenSettings: () => void;
   isGrouping: boolean;
+  groupingLabel?: string;
+  targetAvailable?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   onSearchChange,
   onTriggerAI,
-  onTriggerDomainGroup,
   onOpenStandalone,
   onOpenSettings,
   isGrouping,
+  groupingLabel,
+  targetAvailable = true,
 }) => {
-  const [showAiMenu, setShowAiMenu] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Global shortcut to focus search
@@ -51,55 +52,23 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          {/* Smart Grouping Button */}
-          <div className="relative">
-            <button
-              type="button"
-              disabled={isGrouping}
-              onClick={() => setShowAiMenu(!showAiMenu)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--surface)] hover:bg-[var(--surface-hover)] border-hairline border-[var(--border-subtle)] text-[var(--accent-text)] text-[12px] font-medium transition-colors duration-200 ease-out"
-              title="智能标签分组"
-            >
-              <Sparkles size={12} className={isGrouping ? 'animate-spin' : ''} />
-              <span>{isGrouping ? '整理中' : '智能分组'}</span>
-            </button>
-
-            {showAiMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowAiMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg bg-[var(--app-bg)] border-hairline border-[var(--border-interactive)] p-1 text-[13px] text-[var(--text-high)] shadow-xs animate-in fade-in duration-150 ease-out">
-                  <button
-                    type="button"
-                    className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--surface-hover)] flex items-center gap-2 text-[var(--text-high)] transition-colors duration-150 ease-out"
-                    onClick={() => {
-                      setShowAiMenu(false);
-                      onTriggerAI();
-                    }}
-                  >
-                    <Bot size={14} className="text-[var(--accent-text)] shrink-0" />
-                    <span>AI 语义智能分类</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--surface-hover)] flex items-center gap-2 text-[var(--text-high)] transition-colors duration-150 ease-out"
-                    onClick={() => {
-                      setShowAiMenu(false);
-                      onTriggerDomainGroup();
-                    }}
-                  >
-                    <Globe2 size={14} className="text-[var(--text-medium)] shrink-0" />
-                    <span>按域名合并分组</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <button
+            type="button"
+            disabled={isGrouping || !targetAvailable}
+            onClick={onTriggerAI}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--surface)] hover:bg-[var(--surface-hover)] border-hairline border-[var(--border-subtle)] text-[var(--accent-text)] text-[12px] font-medium transition-colors duration-200 ease-out disabled:opacity-60"
+            title="使用当前分类引擎整理标签页"
+            aria-busy={isGrouping}
+          >
+            <Sparkles size={12} className={isGrouping ? 'animate-spin' : ''} />
+            <span>{isGrouping ? (groupingLabel || '整理中') : '智能分组'}</span>
+          </button>
 
           {/* Standalone Window Detach */}
           <button
             type="button"
             onClick={onOpenStandalone}
+            disabled={!targetAvailable}
             title="独立窗口打开"
             className="p-1 rounded-md hover:bg-[var(--surface-hover)] text-[var(--text-medium)] hover:text-[var(--text-high)] transition-colors duration-150 ease-out"
           >

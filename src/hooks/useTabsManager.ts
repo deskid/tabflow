@@ -1,14 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createTargetWindowBinding } from '../services/targetWindow';
 import {
   TabData,
   ChromeGroupColor,
   GroupingUndoState,
   AISettings,
   planGroupByDomain,
-  planGroupByAI,
+  planGroupingWithFallback,
+  GroupingPlan,
   executeTabGrouping,
   undoTabGrouping,
 } from '../services/aiGrouper';
+
+export type GroupingExecutionResult = Omit<GroupingPlan, 'groups'> & {
+  groupCount: number;
+  proposedGroupCount: number;
+};
 
 export interface TabGroupData {
   id: number;
@@ -27,45 +34,50 @@ export function useTabsManager() {
   const [undoState, setUndoState] = useState<GroupingUndoState | null>(null);
   const [undoToastVisible, setUndoToastVisible] = useState(false);
   const [isGrouping, setIsGrouping] = useState(false);
+  const groupingInFlight = useRef(false);
+  const [windowError, setWindowError] = useState('');
+  const [undoError, setUndoError] = useState('');
+  const [isUndoing, setIsUndoing] = useState(false);
+  const sourceWindowId = useRef<number | null>(null);
+  const sourceWindowClosed = useRef(false);
+  const refreshVersion = useRef(0);
+  const windowBinding = useRef<ReturnType<typeof createTargetWindowBinding> | null>(null);
+  if (!windowBinding.current) windowBinding.current = createTargetWindowBinding(globalThis.location?.search || '');
 
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load tabs and groups for current window
+  // Bind once: a standalone popup must never switch to itself or a newly focused window.
   const refresh = useCallback(async () => {
+    if (sourceWindowClosed.current) return;
+    const version = ++refreshVersion.current;
     try {
-      const currentWin = await chrome.windows.getCurrent();
-      if (!currentWin || !currentWin.id) return;
-      setCurrentWindowId(currentWin.id);
-
-      const winTabs = await chrome.tabs.query({ windowId: currentWin.id });
+      const windowId = await windowBinding.current!();
+      sourceWindowId.current = windowId;
+      const source = await chrome.windows.get(windowId);
+      if (source.type !== 'normal') throw new Error('来源浏览器窗口不可用。');
+      const [winTabs, winGroups] = await Promise.all([
+        chrome.tabs.query({ windowId }),
+        chrome.tabGroups ? chrome.tabGroups.query({ windowId }).catch(() => []) : Promise.resolve([]),
+      ]);
+      if (version !== refreshVersion.current || sourceWindowClosed.current) return;
+      setCurrentWindowId(windowId);
       setTabs(winTabs);
-
-      const active = winTabs.find((t) => t.active);
-      if (active && active.id) {
-        setActiveTabId(active.id);
-      }
-
-      // Query groups
-      if (chrome.tabGroups) {
-        try {
-          const winGroups = await chrome.tabGroups.query({ windowId: currentWin.id });
-          const groupMap = new Map<number, TabGroupData>();
-          for (const g of winGroups) {
-            groupMap.set(g.id, {
-              id: g.id,
-              title: g.title,
-              color: g.color as ChromeGroupColor,
-              collapsed: g.collapsed,
-              windowId: g.windowId,
-            });
-          }
-          setGroups(groupMap);
-        } catch {
-          // ignore if tabGroups not supported in current window
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to refresh tabs:', err);
+      setActiveTabId(winTabs.find((tab) => tab.active)?.id ?? null);
+      const visibleIds = new Set(winTabs.map((tab) => tab.id));
+      setSelectedTabIds((previous) => new Set([...previous].filter((id) => visibleIds.has(id))));
+      setGroups(new Map(winGroups.map((group) => [group.id, {
+        id: group.id, title: group.title, color: group.color as ChromeGroupColor,
+        collapsed: group.collapsed, windowId: group.windowId,
+      }])));
+      setWindowError('');
+    } catch {
+      if (version !== refreshVersion.current) return;
+      setCurrentWindowId(null);
+      setTabs([]);
+      setGroups(new Map());
+      setActiveTabId(null);
+      setSelectedTabIds(new Set());
+      setWindowError('来源浏览器窗口已关闭或不可用，请从浏览器窗口重新打开 TabFlow。');
     }
   }, []);
 
@@ -78,11 +90,28 @@ export function useTabsManager() {
     const handleTabRemoved = () => refresh();
     const handleTabMoved = () => refresh();
     const handleTabActivated = (info: { tabId: number; windowId: number }) => {
+      if (info.windowId !== sourceWindowId.current) return;
       setActiveTabId(info.tabId);
       refresh();
     };
     const handleTabAttached = () => refresh();
     const handleTabDetached = () => refresh();
+
+    const handleWindowRemoved = (windowId: number) => {
+      if (windowId !== sourceWindowId.current) return;
+      sourceWindowClosed.current = true;
+      refreshVersion.current++;
+      setCurrentWindowId(null);
+      setTabs([]);
+      setGroups(new Map());
+      setActiveTabId(null);
+      setSelectedTabIds(new Set());
+      setUndoState(null);
+      setUndoToastVisible(false);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setWindowError('来源浏览器窗口已关闭，请从浏览器窗口重新打开 TabFlow。');
+    };
+    chrome.windows.onRemoved.addListener(handleWindowRemoved);
 
     chrome.tabs.onUpdated.addListener(handleTabUpdated);
     chrome.tabs.onCreated.addListener(handleTabCreated);
@@ -110,6 +139,9 @@ export function useTabsManager() {
     }
 
     return () => {
+      refreshVersion.current++;
+      chrome.windows.onRemoved.removeListener(handleWindowRemoved);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       chrome.tabs.onUpdated.removeListener(handleTabUpdated);
       chrome.tabs.onCreated.removeListener(handleTabCreated);
       chrome.tabs.onRemoved.removeListener(handleTabRemoved);
@@ -131,6 +163,7 @@ export function useTabsManager() {
   const activateTab = async (tabId: number) => {
     try {
       await chrome.tabs.update(tabId, { active: true });
+      if (currentWindowId !== null) await chrome.windows.update(currentWindowId, { focused: true });
       setActiveTabId(tabId);
     } catch (e) {
       console.warn('Activate tab error:', e);
@@ -165,8 +198,10 @@ export function useTabsManager() {
   };
 
   const createNewTab = async () => {
+    if (currentWindowId === null) return;
     try {
-      await chrome.tabs.create({ active: true });
+      await chrome.tabs.create({ windowId: currentWindowId, active: true });
+      await chrome.windows.update(currentWindowId, { focused: true });
     } catch (e) {
       console.warn('Create tab error:', e);
     }
@@ -282,6 +317,7 @@ export function useTabsManager() {
 
   // Group by Domain
   const groupByDomain = async () => {
+    if (groupingInFlight.current || currentWindowId === null) return;
     const tabData: TabData[] = tabs
       .filter((t) => t.id !== undefined && !t.pinned)
       .map((t) => ({
@@ -295,18 +331,21 @@ export function useTabsManager() {
     const plan = planGroupByDomain(tabData);
     if (plan.length === 0) return;
 
+    groupingInFlight.current = true;
     setIsGrouping(true);
     try {
       const uState = await executeTabGrouping(plan, tabData);
-      triggerUndoNotice(uState);
+      if (uState.createdGroupIds.length > 0) triggerUndoNotice(uState);
       refresh();
     } finally {
+      groupingInFlight.current = false;
       setIsGrouping(false);
     }
   };
 
   // Group with AI
   const groupWithAI = async (settings?: AISettings) => {
+    if (groupingInFlight.current || currentWindowId === null) return;
     const tabData: TabData[] = tabs
       .filter((t) => t.id !== undefined && !t.pinned)
       .map((t) => ({
@@ -317,20 +356,30 @@ export function useTabsManager() {
         groupId: t.groupId,
       }));
 
+    if (tabData.length === 0) return;
+    groupingInFlight.current = true;
     setIsGrouping(true);
     try {
-      const plan = await planGroupByAI(tabData, settings);
-      if (plan.length > 0) {
-        const uState = await executeTabGrouping(plan, tabData);
-        triggerUndoNotice(uState);
+      const plan = await planGroupingWithFallback(tabData, settings);
+      let groupCount = 0;
+      if (plan.groups.length > 0) {
+        const uState = await executeTabGrouping(plan.groups, tabData);
+        groupCount = uState.createdGroupIds.length;
+        if (groupCount > 0) triggerUndoNotice(uState);
         refresh();
       }
+      return {
+        method: plan.method, provider: plan.provider, fallbackReason: plan.fallbackReason, notices: plan.notices,
+        groupCount, proposedGroupCount: plan.groups.length,
+      } satisfies GroupingExecutionResult;
     } finally {
+      groupingInFlight.current = false;
       setIsGrouping(false);
     }
   };
 
   const triggerUndoNotice = (uState: GroupingUndoState) => {
+    setUndoError('');
     setUndoState(uState);
     setUndoToastVisible(true);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -342,20 +391,30 @@ export function useTabsManager() {
 
 
   const dismissUndoToast = () => {
+    if (groupingInFlight.current && isUndoing) return;
+    setUndoError('');
     setUndoToastVisible(false);
     setUndoState(null);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   };
 
   const undoGrouping = async () => {
-    if (!undoState) return;
+    if (!undoState || groupingInFlight.current) return;
+    groupingInFlight.current = true;
+    setIsUndoing(true);
+    setUndoError('');
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     try {
       await undoTabGrouping(undoState);
       setUndoState(null);
       setUndoToastVisible(false);
+    } catch (error) {
+      setUndoError(error instanceof Error ? error.message : '撤销未完成，请重试。');
+      setUndoToastVisible(true);
+    } finally {
+      groupingInFlight.current = false;
+      setIsUndoing(false);
       refresh();
-    } catch (e) {
-      console.warn('Undo grouping failed:', e);
     }
   };
 
@@ -417,6 +476,9 @@ export function useTabsManager() {
     currentWindowId,
     selectedTabIds,
     isGrouping,
+    isUndoing,
+    windowError,
+    undoError,
     undoToastVisible,
     dismissUndoToast,
     activateTab,
