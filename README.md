@@ -1,6 +1,8 @@
-# TabFlow - AI 垂直标签与工作空间
+# TabFlow - 垂直标签与智能分组
 
-全新原创设计的现代化 Chrome 垂直标签页与工作空间扩展，基于 **Manifest V3 + React 19 + TypeScript + Radix UI Colors + Chrome Native Messaging** 构建。
+在 Chrome 侧边栏或独立窗口管理当前浏览会话，整合原生标签组、书签与稍后读。新安装默认使用本地规则，无需 Codex 或 API Key；已有设置继续保留，模型分类可在偏好设置中按需启用。基础功能需要 Chrome 120 或更新版本，端侧模型另有设备与版本要求。
+
+基于 **Manifest V3 + React 19 + TypeScript + Radix UI Colors + Chrome Native Messaging** 构建。
 
 ---
 
@@ -8,7 +10,7 @@
 
 - **全新命名**：**TabFlow**（寓意「垂直瀑布流」与「敏捷心流体验」）。
 - **全新视觉设计**：
-  - 图标采用深邃暗夜黑底色与 0.5px 精细描边微光质感。
+  - 图标采用青蓝到靛紫渐变与透明边缘，发布图标使用真实 PNG 编码；128px 版本保留商店要求的安全留白。
   - 核心图形为垂直流式脊柱（Spine Rail），搭配天蓝至电紫的高亮流线卡片（Cyan to Electric Indigo Glow）与层级嵌套子标签。
   - 高对比度矢量几何排布，在 16x16 浏览器顶栏、48x48 扩展管理页与 128x128 视网膜高清屏下均保持清晰辨识度。
 
@@ -90,6 +92,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 分组风格提供主题聚合、项目任务、使用场景、资料类型、站点服务、极简收纳六套预设；选中后可继续编辑，修改后的提示词显示为自定义。
 
 独立窗口始终绑定打开它的正常浏览器窗口。切换焦点不会改为管理另一个窗口，新建标签及打开书签、稍后读也使用该来源窗口。来源窗口关闭时会显示提示并停止标签操作。自动分组在每个浏览器窗口内按顺序执行，不同窗口互不阻塞。
+
+## Chrome Web Store 材料
+
+中文公开发布的文案、图片、隐私申报与审核测试说明见 [上架材料](store/README.md)。隐私说明另提供 [静态网页](docs/privacy.html)，公开地址需在发布托管后验证。
+
+```sh
+pnpm package:store
+```
+
+此命令先生产构建，再生成独立商店 ZIP；清单放在 ZIP 根目录，仅移除上传副本中的开发公钥，不修改本地解压版 ID。已创建商店条目的实际扩展 ID 为 `pnjgkehmcfheoecnhenfeidkpkdjifkm`；条目尚未公开。Windows 本机桥接可显式绑定它：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId pnjgkehmcfheoecnhenfeidkpkdjifkm -WhatIf
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId pnjgkehmcfheoecnhenfeidkpkdjifkm
+```
+
+预演仍需有效 Node.js、官方 Codex CLI 及可选 CodexHome 路径；不写文件或注册表。省略 ExtensionId 时仍按本地开发清单公钥推导 ID。安装器每次为该主机注册一个允许来源，切换到商店 ID 后对应的旧开发 ID 不再包含其中。
 
 ## 验证与发布
 

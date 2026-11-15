@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   aiProfiles: {}, theme: 'system', density: 'comfortable', showFavicon: true,
   showDuplicateCount: true, autoGroupNewTabs: true,
   aiSettings: {
-    provider: 'codex_native', apiKey: '', apiEndpoint: '', model: '',
+    provider: 'heuristic', apiKey: '', apiEndpoint: '', model: '',
     customPrompt: '你是一个专业的浏览器标签页整理助手。请根据标签页的标题与网址，将其归纳整理为 2 到 6 个逻辑清晰的主题组。组名简明扼要（2 到 6 个汉字），并分配合适的颜色。',
   },
 };
