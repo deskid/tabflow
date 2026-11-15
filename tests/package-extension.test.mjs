@@ -4,10 +4,10 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { crc32 } from 'node:zlib';
-import { packageStore, makeZip } from '../scripts/package-store.mjs';
+import { packageExtension, makeZip } from '../scripts/package-extension.mjs';
 
 async function fixture() {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'tabflow-store-test-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'tabflow-extension-test-'));
   await mkdir(path.join(root, 'dist', 'icons'), { recursive: true });
   await writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '1.1.0' }));
   await writeFile(path.join(root, 'LICENSE'), 'ISC test fixture');
@@ -37,10 +37,10 @@ function unzipStored(buffer) {
   return files;
 }
 
-test('store ZIP is valid, has root manifest, excludes development key and preserves source', async () => {
+test('extension ZIP is valid, has root manifest, excludes development key and preserves source', async () => {
   const root = await fixture();
   try {
-    const result = await packageStore({ rootDir: root });
+    const result = await packageExtension({ rootDir: root });
     const files = unzipStored(await readFile(result.path));
     assert.equal(files.size, 7);
     assert.ok(files.has('manifest.json'));
@@ -50,37 +50,37 @@ test('store ZIP is valid, has root manifest, excludes development key and preser
     assert.deepEqual(manifest.permissions, ['tabs']);
     assert.equal(JSON.parse(await readFile(path.join(root, 'dist', 'manifest.json'))).key, 'development-public-key');
     assert.ok([...files.keys()].every((name) => !name.startsWith('dist/')));
-    assert.deepEqual(await readFile(result.path), await readFile((await packageStore({ rootDir: root })).path));
+    assert.deepEqual(await readFile(result.path), await readFile((await packageExtension({ rootDir: root })).path));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('unexpected environment files and source maps cannot enter a store ZIP', async () => {
+test('unexpected environment files and source maps cannot enter an extension ZIP', async () => {
   for (const name of ['.env', 'source.js.map']) {
     const root = await fixture();
     try {
       await writeFile(path.join(root, 'dist', name), 'synthetic private fixture');
-      await assert.rejects(packageStore({ rootDir: root }), /Unexpected private\/development artifact/);
+      await assert.rejects(packageExtension({ rootDir: root }), /Unexpected private\/development artifact/);
     } finally { await rm(root, { recursive: true, force: true }); }
   }
 });
 
-test('store packaging rejects a stale version and a WebP file named PNG', async () => {
+test('extension packaging rejects a stale version and a WebP file named PNG', async () => {
   const root = await fixture();
   try {
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '2.0.0' }));
-    await assert.rejects(packageStore({ rootDir: root }), /versions must match/);
+    await assert.rejects(packageExtension({ rootDir: root }), /versions must match/);
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '1.1.0' }));
     await writeFile(path.join(root, 'dist', 'icons', 'icon128.png'), Buffer.from('RIFFxxxxxxxxWEBPxxxxxxxxxxxxxxxx'));
-    await assert.rejects(packageStore({ rootDir: root }), /real PNG/);
+    await assert.rejects(packageExtension({ rootDir: root }), /real PNG/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('store packaging refuses directory links to files outside the build', async () => {
+test('extension packaging refuses directory links to files outside the build', async () => {
   const root = await fixture();
   try {
     await mkdir(path.join(root, 'outside'));
     await symlink(path.join(root, 'outside'), path.join(root, 'dist', 'outside-link'), process.platform === 'win32' ? 'junction' : 'dir');
-    await assert.rejects(packageStore({ rootDir: root }), /symbolic links/);
+    await assert.rejects(packageExtension({ rootDir: root }), /symbolic links/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

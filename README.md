@@ -10,7 +10,7 @@
 
 - **全新命名**：**TabFlow**（寓意「垂直瀑布流」与「敏捷心流体验」）。
 - **全新视觉设计**：
-  - 图标采用青蓝到靛紫渐变与透明边缘，发布图标使用真实 PNG 编码；128px 版本保留商店要求的安全留白。
+  - 图标采用青蓝到靛紫渐变与透明边缘，扩展图标使用真实 PNG 编码。
   - 核心图形为垂直流式脊柱（Spine Rail），搭配天蓝至电紫的高亮流线卡片（Cyan to Electric Indigo Glow）与层级嵌套子标签。
   - 高对比度矢量几何排布，在 16x16 浏览器顶栏、48x48 扩展管理页与 128x128 视网膜高清屏下均保持清晰辨识度。
 
@@ -93,34 +93,35 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 
 独立窗口始终绑定打开它的正常浏览器窗口。切换焦点不会改为管理另一个窗口，新建标签及打开书签、稍后读也使用该来源窗口。来源窗口关闭时会显示提示并停止标签操作。自动分组在每个浏览器窗口内按顺序执行，不同窗口互不阻塞。
 
-## Chrome Web Store 材料
-
-TabFlow 1.1.0 已于 2026-11-15（Asia/Shanghai）提交 Chrome Web Store 审核，当前状态为**待审核**，已选择通过审核后自动发布；尚未审核通过或正式公开。公开可分享的提交信息见 [提交记录](store/submission-record.md)。中文公开发布的文案、图片、隐私申报与审核测试说明见 [上架材料](store/README.md)。[公开隐私政策](https://deskid.github.io/tabflow/privacy.html) 已由 GitHub Pages 从 main 分支的 `/docs` 发布，并于 2026-11-15 验证匿名 HTTP 200、版本 1.1.0 及联系邮箱；[静态网页源码](docs/privacy.html) 随项目维护。
+## 构建与分发
 
 ```sh
-pnpm package:store
+pnpm package:extension
 ```
 
-此命令先生产构建，再生成独立商店 ZIP；清单放在 ZIP 根目录，仅移除上传副本中的开发公钥，不修改本地解压版 ID。已创建商店条目的实际扩展 ID 为 `pnjgkehmcfheoecnhenfeidkpkdjifkm`；条目尚未公开。Windows 本机桥接可显式绑定它：
+此命令通过 `scripts/package-extension.mjs` 先生产构建，再生成通用扩展 ZIP，例如 `artifacts/packages/tabflow-1.1.0-extension.zip`。清单放在 ZIP 根目录，仅移除打包副本中的开发公钥，原 `dist` 保持不变。本机 Codex CLI 和 Native Messaging Host 按上述步骤单独安装。
+
+Windows 本机桥接可通过 `-ExtensionId` 显式绑定目标扩展。在 `chrome://extensions/` 开启开发者模式，复制目标 TabFlow 的 ID，再在 PowerShell 中运行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId pnjgkehmcfheoecnhenfeidkpkdjifkm -WhatIf
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId pnjgkehmcfheoecnhenfeidkpkdjifkm
+$extensionId = Read-Host '粘贴 chrome://extensions/ 中目标 TabFlow 的 ID'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId $extensionId -WhatIf
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId $extensionId
 ```
 
-预演仍需有效 Node.js、官方 Codex CLI 及可选 CodexHome 路径；不写文件或注册表。省略 ExtensionId 时仍按本地开发清单公钥推导 ID。安装器每次为该主机注册一个允许来源，切换到商店 ID 后对应的旧开发 ID 不再包含其中。
+预演仍需有效 Node.js、官方 Codex CLI 及可选 CodexHome 路径；不写文件或注册表。省略 `-ExtensionId` 时按本地开发清单公钥推导 ID。安装器每次为该主机注册一个允许来源，重新绑定后旧 ID 不再包含其中；应使用目标扩展当前显示的 ID。
 
-## 验证与发布
+## 验证
 
 ```sh
 pnpm check
 pnpm audit
 ```
 
-`check` 会运行 TypeScript 检查、全部回归测试和生产构建；测试使用模拟 Chrome API 和模型服务，不调用真实推理。单独运行测试可使用 `pnpm test`。
+`check` 会运行 TypeScript 检查、全部回归测试和生产构建；测试使用模拟 Chrome API 和模型服务，不调用真实推理。单独运行测试可使用 `pnpm test`。浏览器中的功能、可选模型与数据行为检查见 [功能验证指南](docs/testing.md)。
 
 GitHub 源码应包含 `src`、`public`、`scripts`、`tests`、根目录 HTML 入口、`package.json`、`pnpm-lock.yaml`、`vite.config.ts`、`tsconfig.json`、本说明及许可证、隐私说明。新增源码和测试也需要在发布提交中纳入。`node_modules`、`.pnpm-store`、`dist`、本机启动器、密钥文件及环境文件已在 `.gitignore` 中排除。提交前检查 `git status --short`、`git diff --check` 和实际暂存的文件；浏览器扩展构建产物来自 `dist`，本机桥接按上述安装步骤单独安装。
 
 当前保留的边界：API Key 随 Chrome 设置同步；云端及 Codex 使用完整网址；云端响应尚未统一采用端侧模型及 native 桥接的完整标签 ID 校验。后续版本可继续改进这些行为。
 
-本项目采用 [ISC 许可证](LICENSE)。数据处理与设置保存方式见 [隐私与数据说明](PRIVACY.md)。
+本项目采用 [ISC 许可证](LICENSE)。数据处理与设置保存方式见 [隐私与数据说明](PRIVACY.md)；也可阅读 [公开隐私页面](https://deskid.github.io/tabflow/privacy.html)，其 [静态网页源码](docs/privacy.html) 随项目维护。

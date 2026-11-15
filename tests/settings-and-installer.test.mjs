@@ -119,7 +119,7 @@ try { $null = Get-TabFlowExtensionId } catch { $missingKeyRejected = $true }
 });
 
 test('Windows PowerShell WhatIf returns complete plans without files, registry changes or CLI execution', { skip: process.platform !== 'win32' }, async () => {
-  const temporary = await mkdtemp(path.join(tmpdir(), 'tabflow-store-readiness-'));
+  const temporary = await mkdtemp(path.join(tmpdir(), 'tabflow-settings-installer-'));
   const dummyCLI = path.join(temporary, 'harmless.js');
   const marker = path.join(temporary, 'cli-executed');
   await writeFile(dummyCLI, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'unexpected execution');\n`);

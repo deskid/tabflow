@@ -9,7 +9,7 @@
     "test": "node scripts/test.mjs",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test && pnpm build",
-    "package:store": "pnpm build && node scripts/package-store.mjs"
+    "package:extension": "pnpm build && node scripts/package-extension.mjs"
   },
   "keywords": [],
   "author": "",

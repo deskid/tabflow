@@ -5,6 +5,8 @@ dist
 .extension-key.json
 .pnpm-store/
 artifacts/
+# Release collateral is archived separately from the source tree.
+/store/
 coverage/
 *.log
 .env
