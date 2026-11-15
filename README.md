@@ -1,127 +1,160 @@
-# TabFlow - 垂直标签与智能分组
+<p align="center">
+  <img src="public/icons/icon128.png" width="72" height="72" alt="TabFlow 图标">
+</p>
 
-在 Chrome 侧边栏或独立窗口管理当前浏览会话，整合原生标签组、书签与稍后读。新安装默认使用本地规则，无需 Codex 或 API Key；已有设置继续保留，模型分类可在偏好设置中按需启用。基础功能需要 Chrome 120 或更新版本，端侧模型另有设备与版本要求。
+# TabFlow
 
-基于 **Manifest V3 + React 19 + TypeScript + Radix UI Colors + Chrome Native Messaging** 构建。
+**垂直标签与智能分组，让浏览会话更有条理。**
 
----
+TabFlow 是一个 Chrome 扩展，把标签页、原生标签组、书签和稍后读放进同一个侧边栏。你可以直接使用本地规则整理页面，也可以按需接入模型，或打开独立窗口专注管理当前会话。
 
-## 🎨 视觉品牌与全新图标 (TabFlow Identity)
+**Chrome 120+** · **Manifest V3** · **React + TypeScript** · **ISC License**
 
-- **全新命名**：**TabFlow**（寓意「垂直瀑布流」与「敏捷心流体验」）。
-- **全新视觉设计**：
-  - 图标采用青蓝到靛紫渐变与透明边缘，扩展图标使用真实 PNG 编码。
-  - 核心图形为垂直流式脊柱（Spine Rail），搭配天蓝至电紫的高亮流线卡片（Cyan to Electric Indigo Glow）与层级嵌套子标签。
-  - 高对比度矢量几何排布，在 16x16 浏览器顶栏、48x48 扩展管理页与 128x128 视网膜高清屏下均保持清晰辨识度。
+[开始使用](#开始使用) · [分类引擎](#分类引擎) · [开发](#开发) · [隐私说明](PRIVACY.md) · [反馈问题](https://github.com/deskid/tabflow/issues)
 
----
+![TabFlow：标签很多，也能清晰有序](docs/images/tabs.png)
 
-## 🌟 核心特性全览
+> 展示图片由实际 React 界面与演示数据制作，不包含个人浏览记录。
 
-### 1. 本机 Codex 原生桥接 (Native Messaging)
-- **复用本机登录**：安装本机桥接后，通过官方 Codex CLI 的 `app-server` 查询账号状态和执行分类。登录凭据由 Codex 管理，不传给浏览器扩展。
-- **动态模型列表**：从 Codex 的 `model/list` 读取当前模型目录，支持刷新和使用 Codex 默认模型。列表不代表逐个模型的额度或调用权限保证；连接失败时显示错误，不填充示例模型。
-- **自定义提示词**：支持自由输入分类意向（按项目、按业务线、定制组名风格），提供一键恢复默认。
+## 把浏览任务放在一起
 
-### 2. 打开新标签页自动归类 (Auto-Group on New Tab)
-- 监听新页面加载完成事件，自动匹配当前窗口已有标签组的域名或关键词。
-- 相同网站的标签页自动入组，达到 2 个以上未成组标签自动新建主题组。
-- 设置中提供独立开关随时启闭。
+| 功能 | 能做什么 |
+| --- | --- |
+| 垂直标签 | 搜索、切换、固定、静音和关闭标签，与 Chrome 原生标签组同步 |
+| 原生分组 | 修改组名与颜色、折叠或解散分组，将组内标签保存为书签 |
+| 自动归类 | 新标签按域名或关键词匹配已有分组，可随时关闭 |
+| 智能整理 | 默认使用本地规则，也可选择端侧模型、云端 API 或本机 Codex |
+| 书签与稍后读 | 查找和打开书签，保存当前页面，区分已读与未读内容 |
+| 独立窗口 | 始终管理打开它的来源窗口，切换焦点后仍保持绑定 |
+| 分组撤销 | 在提示有效期内恢复原组名、颜色、折叠状态和标签顺序 |
 
-### 3. 垂直标签管理与原生协同 (Vertical Tabs & Groups)
-- 零延迟双向同步 Chrome 原生标签与标签组。
-- 状态感知：声音波形（点击静音）、内存休眠感知（一键唤醒）、固定标签专区、中键关闭、右键上下文操作。
-- 标签组折叠/展开、调色盘切换、解散分组与一键转存为书签。
+自动归类使用本地规则，不会因打开新页面而调用模型。模型整理失败时会保留错误说明，并显示实际执行的规则兜底结果；已关闭或移到其他窗口的标签会在撤销时跳过。
 
-### 4. 极简设计系统 (Radix UI Colors + 0.5px Hairline)
-- 基于 `@radix-ui/colors` 12 阶语义阶梯，所有边框统一采用 0.5px 极细边框（Retina 高清锐利质感）。
-- 严格控制文字层级（仅 3 级：14px / 13px / 12px，杜绝任何低于 12px 的字体）。
-- 全局禁用中点「·」字符，采用语义间距呈现状态数据。
+## 按你的方式整理
 
----
+六套可编辑的分组风格，覆盖主题、项目任务、使用场景、资料类型、站点服务和极简收纳。选择预设后可以继续修改提示词，配置会在侧边栏、独立窗口和选项页之间同步。
 
-## 🚀 安装与加载指南
+![TabFlow：分组预设与可选分类引擎](docs/images/grouping.png)
 
-需要 Node.js 24 或更新版本，以及 pnpm 11（项目固定版本见 `package.json`）。
+分组风格供模型分类参考，本地规则按内置逻辑运行。各模型提供商独立保存模型、密钥和接口地址，切换时恢复各自配置。
 
-1. 在项目根目录安装依赖并构建：
-   ```sh
-   pnpm install --frozen-lockfile
-   pnpm build
-   ```
-2. 打开 Chrome，访问 `chrome://extensions/` 并开启右上角「开发者模式」。
-3. 点击「加载未打包的扩展程序」，选择项目中的 `dist` 目录。更新构建后，在扩展管理页重新加载 TabFlow。
-4. 快捷键 `Command+Shift+P` (Mac) 或 `Ctrl+Shift+P` (Win) 可呼出 TabFlow 侧边栏。
+## 从临时浏览到长期收藏
 
-### Windows 本机 Codex 功能
+将值得继续阅读的页面加入稍后读，或把整个标签组保存为书签。书签、阅读列表和当前标签共用一个工作入口，减少在多个页面之间寻找内容。
 
-先安装 Node.js 和官方 Codex CLI，并在当前 Windows 用户下完成 `codex login`。然后在项目根目录运行：
+![TabFlow：书签与稍后读放在一处](docs/images/reading-list.png)
+
+## 开始使用
+
+### 从源码加载
+
+需要 **Node.js 24+**、**pnpm 11** 和桌面版 **Chrome 120+**。项目固定的 pnpm 版本见 [package.json](package.json)。
+
+```sh
+git clone https://github.com/deskid/tabflow.git
+cd tabflow
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+1. 打开 `chrome://extensions/`，启用「开发者模式」。
+2. 点击「加载未打包的扩展程序」，选择项目的 `dist` 目录。
+3. 点击工具栏的 TabFlow 图标打开侧边栏，即可使用标签管理和本地规则分类。
+
+更新源码并重新构建后，在扩展管理页重新加载 TabFlow。已有配置会保留；新安装默认选择本地规则，无需账号、API Key 或 Codex。
+
+### 快捷键
+
+| 操作 | Windows / Linux | macOS |
+| --- | --- | --- |
+| 打开侧边栏 | `Ctrl+Shift+P` | `Command+Shift+P` |
+| 打开独立窗口 | `Ctrl+Shift+E` | `Command+Shift+E` |
+
+若快捷键被占用，可在 `chrome://extensions/shortcuts` 中调整。
+
+## 分类引擎
+
+| 方式 | 适用场景 | 额外准备 |
+| --- | --- | --- |
+| 本地规则 | 按关键词、域名快速整理，安装后即可使用 | 无 |
+| Chrome 端侧模型 | 在支持的设备上进行模型分类 | 检查可用性，按提示下载模型 |
+| OpenAI / DeepSeek | 使用对应服务的模型分类 | API Key、模型及所需站点授权 |
+| 自定义 API | 连接 OpenAI 兼容服务或本机接口 | 接口地址、模型，以及服务要求的密钥 |
+| Windows 本机 Codex | 复用官方 Codex CLI 的认证与模型配置 | Codex CLI 和 Native Messaging 桥接 |
+
+### Chrome 端侧模型
+
+在偏好设置选择「Chrome 端侧模型」，先检查可用性，再按提示下载资源。打开设置不会自动下载；资源下载完成后，还会运行自检确认模型能否使用。
+
+支持情况取决于 Chrome、硬件、磁盘、网络和模型状态。当前实现使用英文指令和组名，中文输入可能受模型语言能力限制。模型准备需要联网，推理在设备上进行。
+
+### 云端与自定义 API
+
+在偏好设置选择提供商，填写所需密钥和模型。自定义地址可使用 API 根路径，例如 `http://127.0.0.1:3425/v1`，也可填写完整的 `/v1/chat/completions` 地址；本机服务不要求密钥时可留空。
+
+首次连接自定义主机时，点击模型旁的「连接」并授予站点权限。支持模型目录的服务可以刷新列表，也可以手动输入模型 ID。获取目录不会发起分类推理；模型出现在列表中，也不代表一定具备调用额度。
+
+### Windows 本机 Codex
+
+先安装官方 Codex CLI，并完成 `codex login` 或相应提供商配置。然后在项目根目录运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1
 ```
 
-安装脚本为当前用户创建 Chrome Native Messaging 启动器、清单及注册表项，无需管理员权限。扩展 ID 从扩展清单的公钥计算；若更换公钥，需重新运行安装脚本。支持继承安装时的 `CODEX_HOME`。
+安装器为当前用户注册 Native Messaging Host，无需管理员权限，默认按开发清单的公钥推导扩展 ID。重新加载扩展，在偏好设置中选择「本机 Codex」并刷新状态和模型列表。
 
-重新加载扩展，在偏好设置选择「本机 Codex」，自动读取账号状态和模型列表；模型旁的刷新按钮可重新获取。未连接、未登录和模型查询失败会显示实际状态；未安装本机桥接时仍可使用普通标签管理及本地规则分类。
-
-本机模式使用 Codex `app-server`，不依赖额外的本地 HTTP 代理。AI 分类会将标签标题及网址发送给 Codex 当前配置的模型服务。调用失败会显示错误，不会将规则分类伪装成 AI 结果。
-
-### 自定义 OpenAI 兼容接口
-
-在偏好设置中选择「自定义 API」，依次填写 API 地址和密钥，再从模型列表中选择。地址可填写 `http://127.0.0.1:3425/v1` 或完整的 `/v1/chat/completions` 地址；本地服务不要求密钥时，API Key 可留空。
-
-已授权的地址会自动获取 `/models` 列表；首次连接时点击模型右侧的「连接」按钮，允许 Chrome 访问对应主机。可随时刷新模型；不支持模型目录的服务也可切换为「手动输入」。获取目录不发起推理，模型目录可用不代表每个模型的推理权限或额度都可用。Chrome 的站点权限覆盖该主机的所有端口。
-
-各分类引擎独立保存模型、密钥和地址，切换引擎会恢复上次配置；分组偏好全局共用。旧版配置仅迁移到当时选中的引擎，不复制给其他引擎。侧边栏、独立窗口和选项页会同步设置变化，写入由后台按顺序基于最新配置合并。设置及 API Key 仍使用 Chrome 同步存储；具体数据去向见 [隐私与数据说明](PRIVACY.md)。
-
-修改扩展网络权限后需在 `chrome://extensions/` 重新加载扩展，再关闭并重新打开侧边栏。分类的网络、权限、HTTP 和模型错误会显示在界面中，不会静默改用启发式分类。
-
-### Chrome 端侧模型
-
-选择「Chrome 端侧模型」后，自动执行英语文本参数与默认文本参数的只读可用性检测，不会仅因打开设置而下载模型。下载前若 Chrome 已报告不可用，会直接显示；若显式英语参数不可用但默认文本模式可用，则按已检测的默认文本模式创建会话，仍使用英语指令。预检通过后可点击「下载模型」或直接「智能分组」；预检尚未完成或过期时先重新检测，并提示用户再次点击，保留下载所需的用户手势。
-
-「已下载」表示资源存在，只有创建会话并通过一个不含标签内容的全英文运行自检后才显示已就绪。进度与取消按钮全程可见。错误提示按 Chrome 提供的具体原因显示，无法判定时不猜测设备或语言；折叠的「技术详情」保留脱敏后的原始异常名称、消息和失败阶段。
-
-使用当前 `LanguageModel` API、`initialPrompts` 和兼容的 JSON Schema 结构化输出。每批最多 12 个标签，模型逐个返回主题，代码汇总为最多 6 组，并在每批完成后释放会话。仅遗漏少量标签时针对遗漏项补问一次；仍未获得可靠分类的标签放入 `Other`，主界面明确提示数量。模型完全无法提供分类、返回未知/重复 ID 或无效结构时才整批报错，不能以补齐为由操作其他标签。进度显示已完成/总标签数，取消不执行部分结果。该引擎使用英文组名；当前 Chrome 官方支持语言未包含中文，中文输入可能触发不支持语言的错误。模型是否可用仍取决于 Chrome、硬件、磁盘、网络及模型下载状态。详见 [Chrome Prompt API](https://developer.chrome.com/docs/ai/prompt-api)。
-
-主界面的「智能分组」直接使用偏好设置中选定的分类引擎，无需二次选择；分类期间防止重复提交。撤销会恢复原分组名称、颜色、折叠状态及标签顺序，重建已被 Chrome 删除的空组；已关闭或移至其他窗口的标签会跳过，失败时保留重试入口。模型失败时主界面按域名尝试兜底，并持续显示失败原因、实际分组方式和创建组数；无同域名标签时说明本次未调整分组。用户取消和等待预检不触发兜底，不修改标签。选择本地规则时也按实际方式显示结果，不将规则分组称为 AI 分类成功。
-
-### 分组风格与独立窗口
-
-分组风格提供主题聚合、项目任务、使用场景、资料类型、站点服务、极简收纳六套预设；选中后可继续编辑，修改后的提示词显示为自定义。
-
-独立窗口始终绑定打开它的正常浏览器窗口。切换焦点不会改为管理另一个窗口，新建标签及打开书签、稍后读也使用该来源窗口。来源窗口关闭时会显示提示并停止标签操作。自动分组在每个浏览器窗口内按顺序执行，不同窗口互不阻塞。
-
-## 构建与分发
-
-```sh
-pnpm package:extension
-```
-
-此命令通过 `scripts/package-extension.mjs` 先生产构建，再生成通用扩展 ZIP，例如 `artifacts/packages/tabflow-1.1.0-extension.zip`。清单放在 ZIP 根目录，仅移除打包副本中的开发公钥，原 `dist` 保持不变。本机 Codex CLI 和 Native Messaging Host 按上述步骤单独安装。
-
-Windows 本机桥接可通过 `-ExtensionId` 显式绑定目标扩展。在 `chrome://extensions/` 开启开发者模式，复制目标 TabFlow 的 ID，再在 PowerShell 中运行：
+如果使用其他构建或安装方式，请从 `chrome://extensions/` 复制目标扩展的 ID，先预演，再安装：
 
 ```powershell
-$extensionId = Read-Host '粘贴 chrome://extensions/ 中目标 TabFlow 的 ID'
+$extensionId = Read-Host '粘贴目标 TabFlow 的扩展 ID'
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId $extensionId -WhatIf
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId $extensionId
 ```
 
-预演仍需有效 Node.js、官方 Codex CLI 及可选 CodexHome 路径；不写文件或注册表。省略 `-ExtensionId` 时按本地开发清单公钥推导 ID。安装器每次为该主机注册一个允许来源，重新绑定后旧 ID 不再包含其中；应使用目标扩展当前显示的 ID。
+预演需要有效的 Node.js 与 Codex 路径，不写入文件或注册表。每次安装只允许一个扩展来源，重新绑定会替换旧 ID。桥接支持继承安装时的 `CODEX_HOME`，通过 Codex `app-server` 工作；模型由 CLI 配置决定，可能使用云端推理。
 
-## 验证
+## 数据与隐私
 
-```sh
-pnpm check
-pnpm audit
+- 普通标签管理和本地规则分类不向模型服务发送标签内容。扩展没有独立的广告、统计或遥测后端，也不注入读取页面正文的内容脚本。
+- 云端 API 和本机 Codex 分类会发送标签 ID、标题、**完整 URL（含 query/hash）**及分组提示词，当前不会自动脱敏。
+- 设置及 API Key 保存在 `chrome.storage.sync`，可能随 Chrome 同步到其他设备；没有额外应用层加密，切换引擎不会清除旧密钥。
+- 自定义接口支持 HTTP，HTTP 不提供传输加密；远程服务建议使用 HTTPS。
+- 云端响应的标签 ID 校验尚未与端侧模型和本机桥接完全统一。
+
+完整的数据去向、保存与删除方式见 [隐私与数据说明](PRIVACY.md)，也可阅读 [公开隐私页面](https://deskid.github.io/tabflow/privacy.html)。
+
+## 开发
+
+技术栈为 Manifest V3、React、TypeScript、Vite、Tailwind CSS 和 Radix UI Colors。
+
+| 命令 | 用途 |
+| --- | --- |
+| `pnpm dev` | 启动 Vite 开发服务器 |
+| `pnpm build` | 生成可加载的 `dist` 目录 |
+| `pnpm test` | 运行回归测试 |
+| `pnpm typecheck` | 执行 TypeScript 检查 |
+| `pnpm check` | 依次执行类型检查、测试和生产构建 |
+| `pnpm package:extension` | 构建并生成通用扩展 ZIP |
+| `pnpm audit` | 检查依赖中的已知漏洞 |
+
+分发包输出到 `artifacts/packages/`。打包时只移除副本中的开发公钥，原 `dist` 不变；本机桥接需要单独安装。
+
+```text
+src/
+├── background/    # 扩展后台与 Chrome 事件
+├── components/    # 标签、书签、阅读列表与设置界面
+├── hooks/         # 浏览器状态与界面同步
+└── services/      # 分类引擎、模型与设置管理
+scripts/           # 本机桥接、安装、测试与打包工具
+tests/             # 自动化回归测试
+docs/              # 功能验证、数据说明与项目展示图片
 ```
 
-`check` 会运行 TypeScript 检查、全部回归测试和生产构建；测试使用模拟 Chrome API 和模型服务，不调用真实推理。单独运行测试可使用 `pnpm test`。浏览器中的功能、可选模型与数据行为检查见 [功能验证指南](docs/testing.md)。
+自动化测试使用模拟 Chrome API 和模型服务，不调用真实推理。浏览器中的操作步骤、可选模型与数据行为检查见 [功能验证指南](docs/testing.md)。
 
-GitHub 源码应包含 `src`、`public`、`scripts`、`tests`、根目录 HTML 入口、`package.json`、`pnpm-lock.yaml`、`vite.config.ts`、`tsconfig.json`、本说明及许可证、隐私说明。新增源码和测试也需要在发布提交中纳入。`node_modules`、`.pnpm-store`、`dist`、本机启动器、密钥文件及环境文件已在 `.gitignore` 中排除。提交前检查 `git status --short`、`git diff --check` 和实际暂存的文件；浏览器扩展构建产物来自 `dist`，本机桥接按上述安装步骤单独安装。
+## 反馈与许可
 
-当前保留的边界：API Key 随 Chrome 设置同步；云端及 Codex 使用完整网址；云端响应尚未统一采用端侧模型及 native 桥接的完整标签 ID 校验。后续版本可继续改进这些行为。
+遇到问题可以提交 [GitHub Issue](https://github.com/deskid/tabflow/issues)，或联系 [deskidzhou@gmail.com](mailto:deskidzhou@gmail.com)。反馈时请移除截图和日志中的密钥、私人网址及账号信息。
 
-本项目采用 [ISC 许可证](LICENSE)。数据处理与设置保存方式见 [隐私与数据说明](PRIVACY.md)；也可阅读 [公开隐私页面](https://deskid.github.io/tabflow/privacy.html)，其 [静态网页源码](docs/privacy.html) 随项目维护。
+本项目采用 [ISC 许可证](LICENSE)。
