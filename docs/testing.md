@@ -53,6 +53,8 @@
 
 ## 7. Windows 本机 Codex（可选）
 
+平台支持、完整安装参数及故障排查见 [本机 Codex 接入说明](native-codex.md)。
+
 基础管理不依赖此路径。官方 Codex CLI 及 Native Messaging Host 需要独立安装，不包含在扩展 ZIP 内。先安装 Node.js、官方 Codex CLI，并在当前 Windows 用户下完成 `codex login` 或所需提供商配置。
 
 在 `chrome://extensions/` 开启开发者模式并复制目标 TabFlow 的 ID，再在完整项目根目录运行：

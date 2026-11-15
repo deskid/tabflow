@@ -80,7 +80,7 @@ pnpm build
 | Chrome 端侧模型 | 在支持的设备上进行模型分类 | 检查可用性，按提示下载模型 |
 | OpenAI / DeepSeek | 使用对应服务的模型分类 | API Key、模型及所需站点授权 |
 | 自定义 API | 连接 OpenAI 兼容服务或本机接口 | 接口地址、模型，以及服务要求的密钥 |
-| Windows 本机 Codex | 复用官方 Codex CLI 的认证与模型配置 | Codex CLI 和 Native Messaging 桥接 |
+| 本机 Codex | 复用官方 Codex CLI 的认证与模型配置 | 单独安装桥接，平台支持见接入说明 |
 
 ### Chrome 端侧模型
 
@@ -94,25 +94,9 @@ pnpm build
 
 首次连接自定义主机时，点击模型旁的「连接」并授予站点权限。支持模型目录的服务可以刷新列表，也可以手动输入模型 ID。获取目录不会发起分类推理；模型出现在列表中，也不代表一定具备调用额度。
 
-### Windows 本机 Codex
+### 本机 Codex
 
-先安装官方 Codex CLI，并完成 `codex login` 或相应提供商配置。然后在项目根目录运行：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1
-```
-
-安装器为当前用户注册 Native Messaging Host，无需管理员权限，默认按开发清单的公钥推导扩展 ID。重新加载扩展，在偏好设置中选择「本机 Codex」并刷新状态和模型列表。
-
-如果使用其他构建或安装方式，请从 `chrome://extensions/` 复制目标扩展的 ID，先预演，再安装：
-
-```powershell
-$extensionId = Read-Host '粘贴目标 TabFlow 的扩展 ID'
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId $extensionId -WhatIf
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId $extensionId
-```
-
-预演需要有效的 Node.js 与 Codex 路径，不写入文件或注册表。每次安装只允许一个扩展来源，重新绑定会替换旧 ID。桥接支持继承安装时的 `CODEX_HOME`，通过 Codex `app-server` 工作；模型由 CLI 配置决定，可能使用云端推理。
+通过独立安装的桥接连接官方 Codex CLI，复用其认证和模型配置；模型可能使用云端服务。当前提供 Windows 安装器，macOS 配套安装与实机验证尚未完成。安装命令、扩展 ID 和环境配置见 [本机 Codex 接入说明](docs/native-codex.md)。
 
 ## 数据与隐私
 
