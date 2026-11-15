@@ -9,9 +9,9 @@ TabFlow 通过 Chrome Native Messaging 连接官方 Codex CLI 的 `app-server`�
 | 平台 | 当前 TabFlow 配套情况 |
 | --- | --- |
 | Windows | 提供自动安装器，安装器预演与桥接协议有自动化测试 |
-| macOS | 尚未提供配套安装器，未完成 macOS 实机验证 |
+| macOS | 已由开发者实机验证可用；当前未提供自动安装器 |
 
-官方 Codex CLI 支持 macOS，不代表 TabFlow 的安装配置已经覆盖该平台。仓库中的 [Unix 启动脚本](../scripts/native-bridge.sh) 只负责启动 Node 桥接，不会注册 Chrome Native Messaging Host；当前默认 Codex 路径查找也以 Windows 安装布局为主。因此，不能仅凭存在 shell 脚本就将 macOS 标为已完整支持。
+macOS 接入已由开发者在实际环境验证。仓库中的 [Unix 启动脚本](../scripts/native-bridge.sh) 用于启动 Node 桥接，Chrome Native Messaging Host 清单及 Node.js、Codex 路径需单独配置；当前提供的自动安装器为 Windows PowerShell 脚本。
 
 ## Windows 安装
 
