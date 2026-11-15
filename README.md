@@ -96,7 +96,7 @@ pnpm build
 
 ### 本机 Codex
 
-通过独立安装的桥接连接官方 Codex CLI，复用其认证和模型配置；模型可能使用云端服务。macOS 接入已由开发者实机验证；当前提供 Windows 自动安装器。安装命令、扩展 ID 和环境配置见 [本机 Codex 接入说明](docs/native-codex.md)。
+连接官方 Codex CLI，复用其认证和模型配置；模型可能使用云端服务。桥接配置见 [本机 Codex 接入说明](docs/native-codex.md)。
 
 ## 数据与隐私
 
