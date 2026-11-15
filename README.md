@@ -135,10 +135,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 | `pnpm test` | 运行回归测试 |
 | `pnpm typecheck` | 执行 TypeScript 检查 |
 | `pnpm check` | 依次执行类型检查、测试和生产构建 |
-| `pnpm package:extension` | 构建并生成通用扩展 ZIP |
+| `pnpm package:store` | 构建并生成商店上传 ZIP |
 | `pnpm audit` | 检查依赖中的已知漏洞 |
 
-分发包输出到 `artifacts/packages/`。打包时只移除副本中的开发公钥，原 `dist` 不变；本机桥接需要单独安装。
+上传包输出到 `artifacts/chrome-web-store/tabflow-<版本>-chrome-web-store.zip`，清单位于 ZIP 根目录。打包保留构建清单中的公钥，不修改 `dist`；本机桥接需要单独安装。
+
+### GitHub Actions 自动出包
+
+推送到 `main`、推送 `v*` 标签或提交 Pull Request 时，[CI](https://github.com/deskid/tabflow/actions/workflows/ci.yml) 会在 Linux 和 Windows 上执行类型检查、回归测试及构建打包，也支持在 Actions 页面手动运行。
+
+需要下载时，打开对应的成功运行记录，在 **Artifacts** 中下载 **tabflow-store**。解压下载文件后，使用其中的 `tabflow-<版本>-chrome-web-store.zip`。产物由 Linux 作业生成，保留 14 天，无需配置签名私钥或模型 API Key。
 
 ```text
 src/

@@ -47,7 +47,7 @@ export function makeZip(entries) {
   return Buffer.concat([...local, directory, end]);
 }
 
-export async function packageExtension({ rootDir = projectRoot, outputDir } = {}) {
+export async function packageStore({ rootDir = projectRoot, outputDir } = {}) {
   const root = path.resolve(rootDir);
   const dist = path.join(root, 'dist');
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
@@ -63,22 +63,21 @@ export async function packageExtension({ rootDir = projectRoot, outputDir } = {}
     if (image.length < 24 || !image.subarray(0, 8).equals(pngSignature)
       || image.readUInt32BE(16) !== Number(size) || image.readUInt32BE(20) !== Number(size)) throw new Error('Manifest icons must be real PNG files of the declared size.');
   }
-  // Distribution archives omit the development identity; source and local builds keep it.
-  delete manifest.key;
+  // Keep the built manifest unchanged, including its public extension key.
   const entries = [];
   for (const name of await filesUnder(dist)) {
     if (/(^|\/)(?:node_modules|\.pnpm-store|tests|scripts|\.git)(\/|$)|(^|\/)\.env|\.(?:map|pem|key|log)$/iu.test(name)) throw new Error(`Unexpected private/development artifact in build: ${name}`);
-    entries.push({ name, data: name === 'manifest.json' ? Buffer.from(JSON.stringify(manifest, null, 2) + '\n') : await readFile(path.join(dist, name)) });
+    entries.push({ name, data: await readFile(path.join(dist, name)) });
   }
   entries.push({ name: 'LICENSE', data: await readFile(path.join(root, 'LICENSE')) });
-  const directory = outputDir ? path.resolve(outputDir) : path.join(root, 'artifacts', 'packages');
+  const directory = outputDir ? path.resolve(outputDir) : path.join(root, 'artifacts', 'chrome-web-store');
   await mkdir(directory, { recursive: true });
-  const filename = path.join(directory, `tabflow-${manifest.version}-extension.zip`);
+  const filename = path.join(directory, `tabflow-${manifest.version}-chrome-web-store.zip`);
   const archive = makeZip(entries);
   await writeFile(filename, archive);
-  return { path: filename, version: manifest.version, files: entries.length, bytes: archive.length, developmentKeyRemoved: true };
+  return { path: filename, version: manifest.version, files: entries.length, bytes: archive.length, publicKeyIncluded: Boolean(manifest.key) };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  console.log(JSON.stringify(await packageExtension(), null, 2));
+  console.log(JSON.stringify(await packageStore(), null, 2));
 }

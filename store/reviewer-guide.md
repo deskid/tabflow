@@ -55,7 +55,7 @@ TabFlow 的单一用途是整理浏览会话。扩展在侧边栏和独立窗口
 
 基础管理不依赖此路径。仓库提供 Windows PowerShell 安装脚本；官方 Codex CLI 及 Native Messaging Host 需要独立安装，不包含在商店扩展 ZIP 内。
 
-已知实际商店扩展 ID 为 `pnjgkehmcfheoecnhenfeidkpkdjifkm`。提交前仍需核对安装器 `-ExtensionId` 参数及实际注册结果。商店包不含开发用 manifest.key；不得使用源码公钥算出的本地扩展 ID 代替商店 ID。Native Messaging 的 allowed_origins 必须允许 `chrome-extension://pnjgkehmcfheoecnhenfeidkpkdjifkm/`。
+已知实际商店扩展 ID 为 `pnjgkehmcfheoecnhenfeidkpkdjifkm`。应在 `chrome://extensions/` 核对目标扩展 ID、安装器 `-ExtensionId` 参数及实际注册结果。公钥可以随源码及打包清单保留，但不得仅凭开发公钥推定商店安装后的身份。验证商店安装时，Native Messaging 的 allowed_origins 必须允许 `chrome-extension://pnjgkehmcfheoecnhenfeidkpkdjifkm/`。
 
 具备专用测试 Windows 环境时，先安装 Node.js、官方 Codex CLI，完成 CLI 所需的测试认证或提供商配置，再使用仓库安装器注册当前用户的 host `com.tabflow.codex_bridge`：
 
