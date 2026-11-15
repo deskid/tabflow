@@ -95,7 +95,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 
 ## Chrome Web Store 材料
 
-中文公开发布的文案、图片、隐私申报与审核测试说明见 [上架材料](store/README.md)。隐私说明另提供 [静态网页](docs/privacy.html)，公开地址需在发布托管后验证。
+中文公开发布的文案、图片、隐私申报与审核测试说明见 [上架材料](store/README.md)。[公开隐私政策](https://deskid.github.io/tabflow/privacy.html) 已由 GitHub Pages 从 main 分支的 `/docs` 发布，并于 2026-11-15 验证匿名 HTTP 200、版本 1.1.0 及联系邮箱；[静态网页源码](docs/privacy.html) 随项目维护。
 
 ```sh
 pnpm package:store

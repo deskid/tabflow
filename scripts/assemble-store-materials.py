@@ -43,24 +43,24 @@ intro = f'''# TabFlow {VERSION} 中文公开上架资料
 1. 上传 `upload/tabflow-{VERSION}-chrome-web-store.zip` 到 Chrome Web Store 后台。**不要把本资料包整体当扩展上传。**
 2. 按 `store/listing-zh-CN.md` 填写中文文案，按 `store/assets/README.md` 上传图片。
 3. 核对 `store/privacy-disclosures.md` 与 `store/reviewer-guide.md`，再按后台实际问题确认数据及权限声明。
-4. 将 `PRIVACY.md` 或 `docs/privacy.html` 发布到公开可访问地址并匿名验证，再填写政策 URL。候选 Pages 地址尚未部署验证。
-5. 如需可选 Windows Codex，取得商店实际扩展 ID 后按 `native-host/README.md` 绑定安装。
-6. 账号注册、费用、身份／邮箱验证、政策认证和最终提交由开发者本人完成。
+4. 隐私政策 URL：https://deskid.github.io/tabflow/privacy.html 。2026-11-15 已验证匿名 HTTP 200、版本 1.1.0 与联系邮箱；填写前可再次核对。
+5. 如需可选 Windows Codex，按 `native-host/README.md` 绑定实际商店扩展 ID pnjgkehmcfheoecnhenfeidkpkdjifkm。
+6. 用户已告知注册并创建条目；费用、身份／邮箱验证、政策认证和最终提交仍以开发者后台为准。
 
 详细入口见 `store/README.md`。验证结果及上传 ZIP 的 SHA-256 见 `验证记录.md`。
 
 图片使用真实 React 界面与演示数据，未读取私人浏览记录；没有真实模型调用成功承诺。API Key 同步、完整网址发送和云端标签 ID 校验的现有边界保留，见内部提交检查单。
 
-本资料包仅本地生成，不代表已推送 GitHub、上线隐私网站或通过商店审核。
+本资料包在本地生成。发布源码已推送 GitHub，隐私政策已公开并验证；本资料包不代表后台字段已填写、已提交商店或通过审核。
 '''
 native_readme = '''# 可选 Windows Codex 桥接
 
 此目录是独立本机配套程序，不放进商店扩展上传 ZIP。需要 Node.js 24+、官方 Codex CLI 和有效的 CLI 提供商配置／认证。请先查阅项目说明：https://github.com/deskid/tabflow 。
 
-将本目录完整解压到稳定位置后，在本目录运行（将示例变量替换为商店条目实际的 32 位 a-p 小写扩展 ID）：
+将本目录完整解压到稳定位置后，在本目录运行。以下已填入本项目商店条目的实际扩展 ID；条目尚未公开：
 
 ```powershell
-$storeExtensionId = '替换为实际商店扩展ID'
+$storeExtensionId = 'pnjgkehmcfheoecnhenfeidkpkdjifkm'
 powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-native-host.ps1 -ExtensionId $storeExtensionId -WhatIf
 powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-native-host.ps1 -ExtensionId $storeExtensionId
 ```

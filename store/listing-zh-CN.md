@@ -14,7 +14,7 @@
 - 建议类别：生产力（以后台实际类别为准）
 - 项目主页：https://github.com/deskid/tabflow
 - 支持页面：https://github.com/deskid/tabflow/issues
-- 隐私政策：待发布后填写经验证可公开访问的地址，见 [提交检查](submission-checklist.md)。
+- 隐私政策：https://deskid.github.io/tabflow/privacy.html （2026-11-15 已验证匿名 HTTP 200，包含版本 1.1.0 与联系邮箱；后台保存状态仍需核对）。
 
 ## 简短描述（直接粘贴）
 

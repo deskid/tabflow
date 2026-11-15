@@ -64,7 +64,7 @@ TabFlow 的单一用途是整理浏览会话。扩展在侧边栏和独立窗口
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId pnjgkehmcfheoecnhenfeidkpkdjifkm
 ```
 
-命令已填实际商店 ID，但尚不代表已执行或验证本机注册；执行及验证仍是提交前核对项。安装器及源码位置：https://github.com/deskid/tabflow/tree/main/scripts （更新尚未推送时需先发布并验证链接分支）。重新打开扩展，在偏好设置选择「本机 Codex」并刷新。预期显示真实认证状态、模型目录或可解释错误；未安装 host 时显示未连接，但基础管理及本地规则仍可用。
+命令已填实际商店 ID，但尚不代表已执行或验证本机注册；执行及验证仍是提交前核对项。安装器及源码位置：https://github.com/deskid/tabflow/tree/main/scripts （1.1.0 更新已推送至公开 main 分支）。重新打开扩展，在偏好设置选择「本机 Codex」并刷新。预期显示真实认证状态、模型目录或可解释错误；未安装 host 时显示未连接，但基础管理及本地规则仍可用。
 
 模型目录不保证每个模型都有调用额度。使用公开页面测试分类，模型由 CLI 当前配置决定，可能在云端推理；扩展不接收 CLI 登录令牌或账号邮箱。若此路径审核需要受保护功能，发布者应提供专用可撤销测试访问／与审核方确认可接受的测试安排，不要求审核员使用私人 Codex 账号。
 

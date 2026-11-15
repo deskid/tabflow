@@ -12,7 +12,7 @@
 - 建议类别：生产力（以后台实际类别为准）
 - 主页：`https://github.com/deskid/tabflow`
 - 支持页面：`https://github.com/deskid/tabflow/issues`
-- 隐私政策候选：`https://deskid.github.io/tabflow/privacy.html`。**须先发布并成功验证匿名公开访问及政策内容，才能填入后台；当前不作为已上线地址。**
+- 隐私政策：`https://deskid.github.io/tabflow/privacy.html`。2026-11-15 已发布并验证匿名 HTTP 200，包含版本 1.1.0 及联系邮箱 deskidzhou@gmail.com，可填写此地址；此记录不代表后台已保存。
 
 ## 单一用途（复制正文）
 
