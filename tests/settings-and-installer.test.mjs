@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile, access } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, access, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -120,6 +120,8 @@ try { $null = Get-TabFlowExtensionId } catch { $missingKeyRejected = $true }
 
 test('Windows PowerShell WhatIf returns complete plans without files, registry changes or CLI execution', { skip: process.platform !== 'win32' }, async () => {
   const temporary = await mkdtemp(path.join(tmpdir(), 'tabflow-settings-installer-'));
+  // PowerShell expands Windows 8.3 aliases in the installation directory.
+  const canonicalTemporary = await realpath(temporary);
   const dummyCLI = path.join(temporary, 'harmless.js');
   const marker = path.join(temporary, 'cli-executed');
   await writeFile(dummyCLI, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'unexpected execution');\n`);
@@ -167,8 +169,8 @@ foreach ($invalid in @('', ('A' * 32), ('q' * 32), ('a' * 31), (('a' * 32) + [ch
       assert.equal(plan.manifestContent.path, plan.launcher);
       assert.equal(plan.node, process.execPath);
       assert.equal(plan.codex, dummyCLI);
-      assert.equal(path.dirname(plan.manifest), path.join(temporary, mode));
-      assert.equal(path.dirname(plan.launcher), path.join(temporary, mode));
+      assert.equal(path.dirname(plan.manifest), path.join(canonicalTemporary, mode));
+      assert.equal(path.dirname(plan.launcher), path.join(canonicalTemporary, mode));
       assert.ok(plan.launcherContent.includes(dummyCLI));
       assert.ok(plan.launcherContent.includes(process.execPath));
     }
