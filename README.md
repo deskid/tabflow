@@ -95,7 +95,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 
 ## Chrome Web Store 材料
 
-中文公开发布的文案、图片、隐私申报与审核测试说明见 [上架材料](store/README.md)。[公开隐私政策](https://deskid.github.io/tabflow/privacy.html) 已由 GitHub Pages 从 main 分支的 `/docs` 发布，并于 2026-11-15 验证匿名 HTTP 200、版本 1.1.0 及联系邮箱；[静态网页源码](docs/privacy.html) 随项目维护。
+TabFlow 1.1.0 已于 2026-11-15（Asia/Shanghai）提交 Chrome Web Store 审核，当前状态为**待审核**，已选择通过审核后自动发布；尚未审核通过或正式公开。公开可分享的提交信息见 [提交记录](store/submission-record.md)。中文公开发布的文案、图片、隐私申报与审核测试说明见 [上架材料](store/README.md)。[公开隐私政策](https://deskid.github.io/tabflow/privacy.html) 已由 GitHub Pages 从 main 分支的 `/docs` 发布，并于 2026-11-15 验证匿名 HTTP 200、版本 1.1.0 及联系邮箱；[静态网页源码](docs/privacy.html) 随项目维护。
 
 ```sh
 pnpm package:store

@@ -38,20 +38,20 @@ for filename, dimensions in expected.items():
 
 intro = f'''# TabFlow {VERSION} 中文公开上架资料
 
-个人开发者；中文（简体）；公开发布。发布者显示名暂用 deskid，支持邮箱 deskidzhou@gmail.com。
+2026-11-15（Asia/Shanghai）已提交 Chrome Web Store 审核，当前状态为待审核，通过后自动发布已勾选；尚未审核通过或正式公开。中文（中国），免费、公开分发，所有地区及未列地区均勾选。后台发布者显示名保留原值 deskidzhou@gmail.com，支持邮箱相同。
 
-1. 上传 `upload/tabflow-{VERSION}-chrome-web-store.zip` 到 Chrome Web Store 后台。**不要把本资料包整体当扩展上传。**
-2. 按 `store/listing-zh-CN.md` 填写中文文案，按 `store/assets/README.md` 上传图片。
-3. 核对 `store/privacy-disclosures.md` 与 `store/reviewer-guide.md`，再按后台实际问题确认数据及权限声明。
-4. 隐私政策 URL：https://deskid.github.io/tabflow/privacy.html 。2026-11-15 已验证匿名 HTTP 200、版本 1.1.0 与联系邮箱；填写前可再次核对。
+1. `upload/tabflow-{VERSION}-chrome-web-store.zip` 是已送审的独立上传包，保持原始内容。**不要把本资料包整体当扩展上传。**
+2. 中文文案、工具类别、5 项图片素材、9 项权限理由、隐私政策及审核测试说明已保存。实际记录见 `store/submission-record.md`。
+3. `store/privacy-disclosures.md` 保留预备解释；本次后台没有独立 Remote Code 或可选主机理由字段，不代表选择或填写了这些字段。
+4. 隐私政策 URL：https://deskid.github.io/tabflow/privacy.html 。2026-11-15 已验证匿名 HTTP 200、版本 1.1.0 与联系邮箱，并已保存至后台。
 5. 如需可选 Windows Codex，按 `native-host/README.md` 绑定实际商店扩展 ID pnjgkehmcfheoecnhenfeidkpkdjifkm。
-6. 用户已告知注册并创建条目；费用、身份／邮箱验证、政策认证和最终提交仍以开发者后台为准。
+6. 用户亲自通过 Google 验证邮件完成联系邮箱验证，后台已读回通过状态；不据此推断身份认证、费用或两步验证的具体完成情况。等待审核结果及公开后的安装验收。
 
 详细入口见 `store/README.md`。验证结果及上传 ZIP 的 SHA-256 见 `验证记录.md`。
 
-图片使用真实 React 界面与演示数据，未读取私人浏览记录；没有真实模型调用成功承诺。API Key 同步、完整网址发送和云端标签 ID 校验的现有边界保留，见内部提交检查单。
+图片制作阶段使用真实 React 界面与合成演示数据，未加载个人浏览器资料；此次获授权的真实 Chrome 后台操作另记于提交记录，不与演示数据阶段混同。没有真实模型调用成功承诺。API Key 同步、完整网址发送和云端标签 ID 校验的现有边界保留，见内部提交检查单。
 
-本资料包在本地生成。发布源码已推送 GitHub，隐私政策已公开并验证；本资料包不代表后台字段已填写、已提交商店或通过审核。
+本资料包在本地生成，只收录可公开材料，不收录私人商店后台截图或操作记录。发布准备源码已推送 GitHub，隐私政策已公开并验证；已送审不代表通过审核。
 '''
 native_readme = '''# 可选 Windows Codex 桥接
 

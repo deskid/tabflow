@@ -1,20 +1,19 @@
 # TabFlow 中文商店文案
 
-目标版本：1.1.0。以下字段用于中文公开发布；提交前核对最终安装包行为。
+提交版本：1.1.0。2026-11-15（Asia/Shanghai）已提交审核，状态为待审核，通过后自动发布；尚未审核通过或正式公开。实际保存情况见 [提交记录](submission-record.md)。
 
 ## 基本字段
 
 - 商店名称：`TabFlow - 垂直标签与智能分组`
-- 主要语言：中文（简体，zh-CN）
-- 发布者类型：个人开发者
-- 发布者显示名：deskid（暂定，可在开发者后台修改）
+- 主要语言：中文（中国，zh-CN）
+- 发布者显示名：deskidzhou@gmail.com（后台原值，本次未更改；未修改交易者身份设置）
 - 已创建条目的实际扩展 ID：`pnjgkehmcfheoecnhenfeidkpkdjifkm`
 - 未来商店 URL：https://chromewebstore.google.com/detail/pnjgkehmcfheoecnhenfeidkpkdjifkm （尚未公开；此处为预期地址，不代表已发布或已验证公开可访问）
 - 公开支持邮箱：deskidzhou@gmail.com
-- 建议类别：生产力（以后台实际类别为准）
+- 实际类别：工具
 - 项目主页：https://github.com/deskid/tabflow
 - 支持页面：https://github.com/deskid/tabflow/issues
-- 隐私政策：https://deskid.github.io/tabflow/privacy.html （2026-11-15 已验证匿名 HTTP 200，包含版本 1.1.0 与联系邮箱；后台保存状态仍需核对）。
+- 隐私政策：https://deskid.github.io/tabflow/privacy.html （2026-11-15 已验证匿名 HTTP 200，包含版本 1.1.0 与联系邮箱；后台已保存）。
 
 ## 简短描述（直接粘贴）
 
