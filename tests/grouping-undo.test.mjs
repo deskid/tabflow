@@ -6,7 +6,9 @@ import { stripTypeScriptTypes } from 'node:module';
 const builtin = await readFile(new URL('../src/services/builtinModel.ts', import.meta.url), 'utf8');
 const builtinURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(builtin)).toString('base64')}`;
 const source = await readFile(new URL('../src/services/aiGrouper.ts', import.meta.url), 'utf8');
-const api = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source).replace("'./builtinModel'", JSON.stringify(builtinURL))).toString('base64')}`);
+const planClientURL = 'data:text/javascript,export function planGroupByChatGPTPlan(){throw Error("Unexpected subscription call")}';
+const api = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)
+  .replace("'./builtinModel'", JSON.stringify(builtinURL)).replace("'./chatgptPlanClient'", JSON.stringify(planClientURL))).toString('base64')}`);
 
 function browser(layout, metadata = []) {
   let tabs = layout.map(([id, groupId = -1, windowId = 1]) => ({ id, groupId, windowId }));

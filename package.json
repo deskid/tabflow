@@ -1,6 +1,6 @@
 {
   "name": "tabflow",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Chrome vertical tabs, tab grouping and reading list with optional AI classification",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "test": "node scripts/test.mjs",
     "typecheck": "tsc --noEmit",
     "test:browser": "node scripts/test-browser-oauth.mjs",
+    "test:session": "node scripts/test-browser-chatgpt-session.mjs",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "package:store": "pnpm build && node scripts/package-store.mjs"
   },

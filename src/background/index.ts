@@ -1,6 +1,9 @@
 // Background Service Worker for TabFlow
 import { createSettingsWriter } from '../services/settingsStore';
 import type { SettingsPatch } from '../services/settingsStore';
+import { registerChatGPTSessionBackground } from './chatgptSessionBackground';
+
+registerChatGPTSessionBackground();
 
 const writeSettings = createSettingsWriter();
 const windowQueues = new Map<number, Promise<void>>();

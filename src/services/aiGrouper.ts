@@ -1,4 +1,5 @@
 import { classifyWithBuiltinModel, getBuiltinModelState } from './builtinModel';
+import { planGroupByChatGPTPlan } from './chatgptPlanClient';
 
 // AI and Rule-based Auto-Grouping Engine
 
@@ -357,7 +358,6 @@ export async function planGroupByAI(tabs: TabData[], settings?: AISettings): Pro
 
   // Browser-only ChatGPT plan prototype; never routes through the native host or API-key billing.
   if (provider === 'chatgpt_plan') {
-    const { planGroupByChatGPTPlan } = await import('./chatgptPlan');
     return planGroupByChatGPTPlan(tabs, { model, customPrompt });
   }
 

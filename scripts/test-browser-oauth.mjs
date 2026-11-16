@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { access, cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
 const runDirectory = path.join(root, 'artifacts', `browser-smoke-${Date.now()}`);
@@ -361,4 +362,7 @@ async function main() {
   }
 }
 
-await main();
+export { root, runDirectory, findChrome, prepareFixture, reserveDebugPort, connectToChrome,
+  createCDP, evaluator, waitFor, delay, capture, stopChrome };
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) await main();

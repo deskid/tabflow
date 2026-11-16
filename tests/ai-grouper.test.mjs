@@ -7,7 +7,9 @@ const source = await readFile(new URL('../src/services/aiGrouper.ts', import.met
 const builtinSource = await readFile(new URL('../src/services/builtinModel.ts', import.meta.url), 'utf8');
 const builtinURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(builtinSource)).toString('base64')}`;
 const builtinService = await import(builtinURL);
-const outputText = stripTypeScriptTypes(source).replace("'./builtinModel'", JSON.stringify(builtinURL));
+const planClientURL = 'data:text/javascript,export function planGroupByChatGPTPlan(){throw Error("Unexpected subscription call")}';
+const outputText = stripTypeScriptTypes(source).replace("'./builtinModel'", JSON.stringify(builtinURL))
+  .replace("'./chatgptPlanClient'", JSON.stringify(planClientURL));
 const api = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 
 function mockNative(response, error) {

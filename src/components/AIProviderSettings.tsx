@@ -3,18 +3,14 @@ import { Check, CheckCircle2, Copy, LoaderCircle, RefreshCw } from 'lucide-react
 import { BuiltinModelStatus } from './BuiltinModelStatus';
 import { getNativeInstallCommand } from '../services/nativeCodexSetup';
 import {
-  getChatGPTPlanAccounts, getChatGPTPlanStatus, signInChatGPTPlan,
-  signOutChatGPTPlan, subscribeChatGPTPlanSession,
-} from '../services/chatgptPlanAuth';
+  getChatGPTPlanAccounts, getChatGPTPlanModels, getChatGPTPlanStatus,
+  initializeChatGPTPlanSession, signInChatGPTPlan, signOutChatGPTPlan,
+  subscribeChatGPTPlanSession, type ChatGPTPlanAccount, type ChatGPTPlanStatus,
+} from '../services/chatgptPlanClient';
 import {
   APIAccessRequiredError, getAPIModels, getLocalCodexStatus,
   type AISettings, type CodexAccount, type CodexModel,
 } from '../services/aiGrouper';
-
-async function getChatGPTPlanModels() {
-  const service = await import('../services/chatgptPlan');
-  return service.getChatGPTPlanModels();
-}
 
 interface Props {
   active: boolean;
@@ -41,15 +37,25 @@ const PROVIDERS: Array<{ id: AISettings['provider']; label: string }> = [
 
 const fieldClass = 'w-full min-w-0 px-2.5 py-2 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[13px] text-[var(--text-high)] outline-none';
 
-function planAccountLabel(account: { label: string; email?: string; clientId: string }): string {
-  if (account.label && !account.label.includes(account.clientId)) return account.label;
-  return account.email || 'ChatGPT 账户';
+function planAccountLabel(account: ChatGPTPlanAccount, accounts: ChatGPTPlanAccount[]): string {
+  const identity = account.email || 'ChatGPT 账户';
+  const duplicated = accounts.some((item) => item.id !== account.id && (item.email || 'ChatGPT 账户') === identity);
+  if (!duplicated) return identity;
+  const label = accounts.find((item) => item.id === account.id)?.label ?? account.label;
+  const registration = /注册\s*([1-9]\d*)\s*$/u.exec(label);
+  if (registration) return `${identity} · 账户${registration[1]}`;
+  // Hash the registration ID instead of displaying client/subject identifiers.
+  let suffix = 2166136261;
+  for (let index = 0; index < account.id.length; index++) {
+    suffix = Math.imul(suffix ^ account.id.charCodeAt(index), 16777619);
+  }
+  return `${identity} · 账户 ${(suffix >>> 0).toString(36).padStart(7, '0')}`;
 }
 
 function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { model: string }) {
-  const [session, setSession] = useState(getChatGPTPlanStatus);
-  const [accounts, setAccounts] = useState<Awaited<ReturnType<typeof getChatGPTPlanAccounts>>>([]);
-  const [accountId, setAccountId] = useState(() => getChatGPTPlanStatus().account?.id ?? '');
+  const [session, setSession] = useState<ChatGPTPlanStatus>(getChatGPTPlanStatus);
+  const [hydrating, setHydrating] = useState(true);
+  const [accounts, setAccounts] = useState<ChatGPTPlanAccount[]>([]);
   const [models, setModels] = useState<Awaited<ReturnType<typeof getChatGPTPlanModels>>>([]);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<'signin' | 'signout' | null>(null);
@@ -66,6 +72,7 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
 
   useEffect(() => {
     mounted.current = true;
+    let disposed = false;
     const refreshSession = () => {
       setSession(getChatGPTPlanStatus());
       const id = ++accountRequest.current;
@@ -78,8 +85,16 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
       });
     };
     const unsubscribe = subscribeChatGPTPlanSession(refreshSession);
-    refreshSession();
+    void initializeChatGPTPlanSession().then(() => {
+      if (disposed) return;
+      refreshSession();
+    }).catch((cause: unknown) => {
+      if (!disposed) setError(cause instanceof Error ? cause.message : '读取 ChatGPT 会话失败');
+    }).finally(() => {
+      if (!disposed) setHydrating(false);
+    });
     return () => {
+      disposed = true;
       mounted.current = false;
       operation.current++;
       modelRequest.current++;
@@ -87,10 +102,6 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
       unsubscribe();
     };
   }, []);
-
-  useEffect(() => {
-    if (sessionAccount) setAccountId(sessionAccount);
-  }, [sessionAccount]);
 
   const loadModels = useCallback(async () => {
     const id = ++modelRequest.current;
@@ -120,11 +131,11 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
   useEffect(() => {
     setModels([]);
     setLoading(false);
-    if (authorized) void loadModels();
+    if (!hydrating && authorized) void loadModels();
     return () => { modelRequest.current++; };
-  }, [authorized, sessionAccount, loadModels]);
+  }, [hydrating, authorized, sessionAccount, loadModels]);
 
-  const signIn = async () => {
+  const signIn = async (accountId?: string) => {
     const id = ++operation.current;
     setPending('signin');
     setError('');
@@ -166,65 +177,75 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
   };
 
   const modelInCatalog = models.some((item) => item.id === model);
+  const accountLabel = session.account ? planAccountLabel(session.account, accounts) : 'ChatGPT';
   return (
-    <div className="space-y-3 rounded-lg border-hairline border-[var(--border-subtle)] bg-[var(--surface)] p-3">
-      <p className="text-[12px] text-[var(--text-medium)]">
-        使用自己的 ChatGPT 订阅，无需安装本机组件。实验接入仍在验证。
-      </p>
-      {accounts.length > 0 && <div>
-        <label htmlFor="chatgpt-plan-account" className="block mb-1 text-[12px] font-medium text-[var(--text-medium)]">ChatGPT 账户</label>
-        <select id="chatgpt-plan-account" className={fieldClass} value={accountId} disabled={!!pending}
-          onChange={(event) => setAccountId(event.target.value)}>
-          <option value="">新增账户并授权</option>
-          {accounts.map((account) => <option key={account.id} value={account.id}>
-            {planAccountLabel(account)}
-          </option>)}
-        </select>
-        <p className="mt-1 text-[11px] text-[var(--text-low)]">仅保存账户注册信息；选择已有账户后点击按钮重新授权。</p>
-      </div>}
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" disabled={!!pending} onClick={() => { void signIn(); }}
-          className="flex items-center gap-1.5 rounded-md bg-[var(--accent-text)] px-3 py-2 text-[13px] text-[var(--app-bg)] disabled:opacity-50">
-          {pending === 'signin' && <LoaderCircle size={15} className="animate-spin" />}
-          Continue with ChatGPT
-        </button>
-        {session.loggedIn && <button type="button" disabled={!!pending} onClick={() => { void signOut(); }}
-          className="rounded-md border-hairline border-[var(--border-subtle)] px-3 py-2 text-[12px] text-[var(--text-medium)] disabled:opacity-50">
-          {pending === 'signout' ? '正在退出并撤销…' : '退出并撤销授权'}
-        </button>}
-      </div>
-      {pending === 'signin' && <p role="status" className="text-[12px] text-[var(--text-medium)]">
-        正在等待 ChatGPT 授权，请在弹出的 OAuth 窗口中继续；关闭该窗口可取消。
-      </p>}
-      <p role="status" className="text-[12px] text-[var(--text-medium)]">
-        {authorized ? '已授权。'
-          : session.loggedIn ? '账号已登录，但计划推理未授权。请主动重新授权后再分类。'
-            : '未登录，尚未获得计划推理授权。'}
-        {session.account && ` 当前账户：${planAccountLabel(session.account)}`}
-      </p>
-      {authorized && <div>
-        <label htmlFor="chatgpt-plan-model" className="block mb-1.5 text-[12px] font-medium text-[var(--text-medium)]">账户可用模型</label>
-        <div className="flex items-center gap-2">
-          <select id="chatgpt-plan-model" className={fieldClass} value={modelInCatalog ? model : ''}
-            disabled={loading || !!pending || !models.length}
-            onChange={(event) => onUpdate({ model: event.target.value })}>
-            <option value="">选择账户目录中的模型</option>
-            {models.map((item) => <option key={item.id} value={item.id}>{item.name}{item.isDefault ? '（默认）' : ''}</option>)}
-          </select>
-          <button type="button" disabled={loading || !!pending} title="刷新模型目录" aria-label="刷新模型目录"
-            onClick={() => { void loadModels(); }}
-            className="shrink-0 rounded-md border-hairline border-[var(--border-subtle)] px-2.5 py-2 text-[var(--accent-text)] disabled:opacity-50">
-            {loading ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+    <div className="space-y-2.5">
+      <div className="flex min-h-9 items-center gap-2.5">
+        <span className="w-7 shrink-0 text-[12px] font-medium text-[var(--text-medium)]">账户</span>
+        {hydrating ? (
+          <span role="status" className="flex items-center gap-1.5 text-[12px] text-[var(--text-medium)]">
+            <LoaderCircle size={14} className="animate-spin" />正在连接…
+          </span>
+        ) : session.loggedIn ? (
+          <>
+            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-hover)] text-[12px] font-medium text-[var(--text-medium)]">
+              {accountLabel.charAt(0).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-high)]" title={accountLabel}>{accountLabel}</span>
+            <span role="status" className="flex shrink-0 items-center gap-1 text-[11px] text-[var(--text-medium)]">
+              {pending ? <LoaderCircle size={12} className="animate-spin" />
+                : <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${authorized ? 'bg-[var(--success-text)]' : 'bg-[var(--text-low)]'}`} />}
+              {pending === 'signin' ? '授权中' : pending === 'signout' ? '退出中' : authorized ? '已连接' : '需授权'}
+            </span>
+            {!authorized && !pending && <button type="button" onClick={() => { void signIn(sessionAccount); }}
+              className="shrink-0 text-[12px] text-[var(--accent-text)]">重新授权</button>}
+          </>
+        ) : (
+          <button type="button" disabled={!!pending} onClick={() => { void signIn(); }}
+            className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--accent-text)] px-3 py-2 text-[13px] text-[var(--app-bg)] disabled:opacity-50">
+            {pending === 'signin' && <LoaderCircle size={15} className="animate-spin" />}
+            Continue with ChatGPT
           </button>
-        </div>
-        {model && !modelInCatalog && !loading && <p className="mt-1 text-[12px] text-[var(--text-medium)]">之前选择的模型不在当前目录中，请重新选择。</p>}
-        <p className="mt-1 text-[11px] text-[var(--text-low)]">{loading ? '正在读取模型目录…' : '可见模型，实际权限由分类请求检查。'}</p>
+        )}
+        {!hydrating && (session.loggedIn || accounts.length > 0) && <select
+          aria-label="账户菜单" title="账户菜单" value="" disabled={!!pending}
+          onChange={(event) => {
+            const action = event.target.value;
+            if (action === 'signout') void signOut();
+            else if (action === 'add') void signIn();
+            else if (action === 'reauthorize') void signIn(sessionAccount);
+            else if (action.startsWith('account:')) void signIn(action.slice('account:'.length));
+          }}
+          className="h-8 w-8 shrink-0 cursor-pointer appearance-none rounded-md border-hairline border-[var(--border-subtle)] bg-[var(--app-bg)] text-center text-[16px] text-[var(--text-medium)] outline-none focus:border-[var(--accent-border)] disabled:opacity-50">
+          <option value="" disabled>⋯</option>
+          {accounts.some((account) => account.id !== sessionAccount) && <optgroup label="切换账户">
+            {accounts.filter((account) => account.id !== sessionAccount).map((account) => (
+              <option key={account.id} value={`account:${account.id}`}>{planAccountLabel(account, accounts)}</option>
+            ))}
+          </optgroup>}
+          <option value="add">新增账户</option>
+          {session.loggedIn && <option value="reauthorize">重新授权</option>}
+          {session.loggedIn && <option value="signout">退出并撤销授权</option>}
+        </select>}
+      </div>
+      {!hydrating && authorized && <div className="flex items-center gap-2.5">
+        <label htmlFor="chatgpt-plan-model" className="w-7 shrink-0 text-[12px] font-medium text-[var(--text-medium)]">模型</label>
+        <select id="chatgpt-plan-model" className={fieldClass} value={modelInCatalog ? model : ''}
+          disabled={loading || !!pending || !models.length}
+          onChange={(event) => onUpdate({ model: event.target.value })}>
+          {!modelInCatalog && <option value="">{loading ? '正在读取模型…' : '暂无可用模型'}</option>}
+          {models.map((item) => <option key={item.id} value={item.id}>{item.name}{item.isDefault ? '（默认）' : ''}</option>)}
+        </select>
+        <button type="button" disabled={loading || !!pending} title="刷新模型目录" aria-label="刷新模型目录"
+          onClick={() => { void loadModels(); }}
+          className="shrink-0 rounded-md border-hairline border-[var(--border-subtle)] px-2 py-2 text-[var(--accent-text)] disabled:opacity-50">
+          {loading ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+        </button>
       </div>}
-      {(error || session.error) && <p role="alert" className="text-[12px] text-[var(--text-medium)] break-words">{error || session.error}</p>}
+      {[...new Set([error, session.error].filter(Boolean))].map((message) => (
+        <p key={message} role="alert" className="text-[12px] text-[var(--text-medium)] break-words">{message}</p>
+      ))}
       {notice && <p role="status" className="text-[12px] text-[var(--text-medium)]">{notice}</p>}
-      <p className="text-[11px] leading-relaxed text-[var(--text-low)]">
-        凭据仅在当前界面保留，关闭后需重新登录；受账号权限与用量限制。
-      </p>
     </div>
   );
 }
