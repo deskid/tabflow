@@ -29,8 +29,34 @@ function CmdValue([string]$value) {
   return $value.Replace('%', '%%')
 }
 
-$repoRoot = Split-Path $PSScriptRoot -Parent
-$bridgePath = (Resolve-Path (Join-Path $PSScriptRoot 'native-bridge.mjs')).Path
+function Install-TabFlowBridge {
+  param([string]$SourceDirectory, [string]$InstallDirectory)
+  $files = @('native-bridge.mjs', 'codex-app-server.mjs')
+  $downloadDirectory = $null
+  try {
+    $hasLocalBridge = $SourceDirectory -and (@($files | Where-Object { !(Test-Path -LiteralPath (Join-Path $SourceDirectory $_) -PathType Leaf) }).Count -eq 0)
+    if (!$hasLocalBridge) {
+      $downloadDirectory = Join-Path ([IO.Path]::GetTempPath()) ('tabflow-native-' + [guid]::NewGuid().ToString('N'))
+      New-Item -ItemType Directory -Path $downloadDirectory | Out-Null
+      [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+      $ref = if ($env:TABFLOW_REF) { $env:TABFLOW_REF } else { 'main' }
+      foreach ($file in $files) {
+        Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/deskid/tabflow/$ref/scripts/$file" -OutFile (Join-Path $downloadDirectory $file)
+      }
+      $SourceDirectory = $downloadDirectory
+    }
+    New-Item -ItemType Directory -Path $InstallDirectory -Force | Out-Null
+    foreach ($file in $files) {
+      $source = [IO.Path]::GetFullPath((Join-Path $SourceDirectory $file))
+      $destination = [IO.Path]::GetFullPath((Join-Path $InstallDirectory $file))
+      if ($source -ine $destination) { Copy-Item -LiteralPath $source -Destination $destination -Force }
+    }
+  } finally {
+    if ($downloadDirectory) { Remove-Item -LiteralPath $downloadDirectory -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+$repoRoot = if ($PSScriptRoot) { Split-Path $PSScriptRoot -Parent } else { $null }
 if (!$NodePath) { $NodePath = (Get-Command node.exe -ErrorAction Stop).Source }
 $NodePath = (Resolve-Path -LiteralPath $NodePath).Path
 if (!$CodexPath) {
@@ -46,11 +72,17 @@ if ([IO.Path]::GetExtension($CodexPath) -notin @('.exe', '.js', '.mjs')) { throw
 if (!$CodexHome) { $CodexHome = [Environment]::GetEnvironmentVariable('CODEX_HOME', 'User') }
 if ($CodexHome) { $CodexHome = (Resolve-Path -LiteralPath $CodexHome).Path }
 $InstallDirectory = [IO.Path]::GetFullPath($InstallDirectory)
+$bridgePath = Join-Path $InstallDirectory 'native-bridge.mjs'
 if ($PSBoundParameters.ContainsKey('ExtensionId')) {
   $resolvedExtensionId = Get-TabFlowExtensionId -ExtensionId $ExtensionId
 } else {
-  $publicManifest = Get-Content -LiteralPath (Join-Path $repoRoot 'public\manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-  $resolvedExtensionId = Get-TabFlowExtensionId -PublicKey $publicManifest.key
+  $publicManifestPath = if ($repoRoot) { Join-Path $repoRoot 'public\manifest.json' } else { $null }
+  if ($publicManifestPath -and (Test-Path -LiteralPath $publicManifestPath -PathType Leaf)) {
+    $publicManifest = Get-Content -LiteralPath $publicManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $resolvedExtensionId = Get-TabFlowExtensionId -PublicKey $publicManifest.key
+  } else {
+    $resolvedExtensionId = Get-TabFlowExtensionId -ExtensionId 'pnjgkehmcfheoecnhenfeidkpkdjifkm'
+  }
 }
 $launcher = Join-Path $InstallDirectory 'tabflow-codex-bridge.cmd'
 $manifestPath = Join-Path $InstallDirectory 'com.tabflow.codex_bridge.json'
@@ -68,8 +100,8 @@ $nativeManifest = [ordered]@{
   allowed_origins = @("chrome-extension://$resolvedExtensionId/")
 }
 $installed = $false
-if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Write native host launcher and manifest, and register Chrome native messaging host in both HKCU registry views')) {
-  New-Item -ItemType Directory -Path $InstallDirectory -Force | Out-Null
+if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Copy or download bridge scripts, write native host launcher and manifest, and register Chrome native messaging host in both HKCU registry views')) {
+  Install-TabFlowBridge -SourceDirectory $PSScriptRoot -InstallDirectory $InstallDirectory
   $utf8 = New-Object System.Text.UTF8Encoding($false)
   [IO.File]::WriteAllText($launcher, $launcherContent, $utf8)
   [IO.File]::WriteAllText($manifestPath, ($nativeManifest | ConvertTo-Json -Depth 4), $utf8)
@@ -89,6 +121,7 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Write native host launcher and m
   extensionId = $resolvedExtensionId
   manifest = $manifestPath
   launcher = $launcher
+  bridge = $bridgePath
   node = $NodePath
   codex = $CodexPath
   customCodexHome = [bool]$CodexHome
