@@ -24,7 +24,7 @@ async function jwt(claims, corrupt = false) {
 function fixture(options = {}) {
   const calls = { writes: [], fetch: [], rules: [], removed: [], navigation: [], permissions: [], posts: [], order: [] };
   const storage = options.sharedStorage ?? structuredClone(options.storage ?? {});
-  const onConnect = event(), onRemoved = event();
+  const onConnect = event(), onRemoved = event(), onNavigation = event();
   const chrome = {
     runtime: { id: 'extension-fixture', onConnect, getURL: path => `chrome-extension://extension-fixture/${path}` },
     permissions: { request: async spec => { calls.permissions.push(spec); return options.permission !== false; } },
@@ -33,7 +33,7 @@ function fixture(options = {}) {
       set: async data => { if (options.storageDelay) await tick(); calls.writes.push(structuredClone(data)); Object.assign(storage, structuredClone(data)); },
     } },
     tabs: { onRemoved, create: async info => { calls.order.push('tab'); assert.equal(info.url, 'about:blank'); return { id: 41 }; },
-      update: async (id, info) => { calls.order.push('navigate'); assert.equal(id, 41); calls.navigation.push(info.url); },
+      update: async (id, info) => { calls.order.push('navigate'); assert.equal(id, 41); calls.navigation.push(info.url); onNavigation.emit(info.url); },
       remove: async id => { calls.removed.push(id); } },
     declarativeNetRequest: { RuleActionType: { REDIRECT: 'redirect' }, ResourceType: { MAIN_FRAME: 'main_frame' },
       updateSessionRules: async rules => { calls.order.push(rules.addRules ? 'rule' : 'cleanup'); calls.rules.push(rules); } },
@@ -83,7 +83,7 @@ function fixture(options = {}) {
       onMessage: event(), disconnected: false, postMessage(message) { calls.posts.push(message); }, disconnect() { p.disconnected = true; } };
     onConnect.emit(p); return p;
   }
-  return { chrome, fetch, calls, storage, port };
+  return { chrome, fetch, calls, storage, port, onNavigation };
 }
 async function load(options) {
   const f = fixture(options);
@@ -97,10 +97,26 @@ async function load(options) {
   return { ...f, s };
 }
 async function started(f, accountId) {
+  let listener;
+  let timer;
+  const navigated = new Promise(resolve => { listener = resolve; f.onNavigation.addListener(listener); });
   const result = f.s.signInChatGPTPlan(accountId);
-  for (let n = 0; n < 100 && !f.calls.navigation.length; n++) await tick();
-  assert.ok(f.calls.navigation.length, 'authorization tab navigated');
-  return { result, query: new URL(f.calls.navigation.at(-1)).searchParams };
+  try {
+    // Wait for the actual mock navigation, not an arbitrary number of event-loop
+    // turns: WebCrypto scheduling differs between Windows and Linux runners.
+    const url = await Promise.race([
+      navigated,
+      result.then(status => { throw new Error(`Authorization ended before navigation: ${status.error ?? 'no callback'}`); }),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Authorization navigation did not occur within 5 seconds')), 5_000); }),
+    ]);
+    return { result, query: new URL(url).searchParams };
+  } catch (error) {
+    await f.s.signOutChatGPTPlan();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    f.onNavigation.removeListener(listener);
+  }
 }
 async function login(f, data = {}, accountId) {
   const { result, query } = await started(f, accountId);
