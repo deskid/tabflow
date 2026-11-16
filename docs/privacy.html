@@ -30,7 +30,7 @@
 <main>
   <header>
     <h1>TabFlow 隐私与数据说明</h1>
-    <p>适用版本：1.1.0。个人开发者：deskid。联系邮箱：<a href="mailto:deskidzhou@gmail.com">deskidzhou@gmail.com</a>。</p>
+    <p>适用版本：1.2.0 授权原型（尚未发布）。个人开发者：deskid。联系邮箱：<a href="mailto:deskidzhou@gmail.com">deskidzhou@gmail.com</a>。</p>
     <div class="intro">TabFlow 用于整理浏览会话，包括标签、原生标签组、书签和稍后读。普通管理与本地规则分类无需 Codex 或 API Key；可选模型能力有不同的数据处理路径。</div>
   </header>
 
@@ -47,11 +47,12 @@
     <dl>
       <dt>本地规则</dt><dd>在扩展内处理，不向模型服务发送分类内容。</dd>
       <dt>Chrome 端侧模型</dt><dd>由 Chrome 在设备上推理，准备模型需要联网下载资源。可用性受 Chrome、设备、磁盘、网络、语言及模型状态影响，不保证所有设备可用；当前使用英文指令和组名，中文输入可能不受支持。</dd>
+      <dt>ChatGPT 订阅（实验）</dt><dd>用户自行在 OpenAI 登录并授权后，扩展直接请求官方模型目录与 Responses API，使用账号获准的 ChatGPT 计划；不经过开发者服务器，不继承本机 CLI 登录。</dd>
       <dt>本机 Codex</dt><dd>通过单独安装的本机桥接交给官方 Codex CLI，再由 CLI 当前配置的模型服务处理，可能使用云端推理；本机桥接不等于离线。当前提供 Windows 安装脚本，其他系统未提供安装器。</dd>
       <dt>OpenAI、DeepSeek、自定义 API</dt><dd>发送到用户选择的服务接口。第三方可能收费，其保存和使用请求的方式受该服务条款、政策和配置约束。</dd>
     </dl>
     <p>云端和 Codex 请求保留<strong>完整网址，包括 query 查询参数和 hash 片段</strong>。其中可能含个人搜索、内部路径、令牌或签名。TabFlow 不自动脱敏；标题及自定义提示词也可能包含个人或敏感内容。请只选择可信服务，并在使用前核对其政策。</p>
-    <p>TabFlow 不主动要求姓名、位置、支付或健康资料，但不能保证网址、标题或用户文本不含此类信息。没有开发者自己的服务器不意味着不处理用户数据。</p>
+    <p>除用户自愿登录 ChatGPT 时授权的基本账号身份信息外，TabFlow 不主动要求位置、支付或健康资料，但不能保证网址、标题或用户文本不含此类信息。没有开发者自己的服务器不意味着不处理用户数据。</p>
   </section>
 
   <section aria-labelledby="settings">
@@ -59,6 +60,14 @@
     <p>外观、自动归类开关、引擎、模型、接口地址、API Key 与分组偏好保存在 <code>chrome.storage.sync</code>。启用 Chrome 同步时，设置可能同步到账号关联设备。API Key 没有单独限制在本机保存，TabFlow 没有为其提供额外应用层加密。</p>
     <p>每个提供商配置独立保留，切换引擎不会删除旧密钥。获取 API 模型目录时会将配置的密钥发送到所选接口，不发送标签内容；已授权接口的模型目录查询可能在打开对应设置时发生。分类请求会同时发送上述标签数据和提示词。</p>
     <p>自定义接口按需请求对应协议和主机的访问权限；Chrome 授权覆盖该主机相同协议下的全部端口和路径。请求不携带浏览器 Cookie，并拒绝 HTTP 重定向。内置 OpenAI、DeepSeek 地址使用 HTTPS；自定义地址允许 HTTP，HTTP 没有传输加密。远程服务优先选择 HTTPS，不应把所有数据流描述为已加密。</p>
+  </section>
+
+  <section aria-labelledby="subscription">
+    <h2 id="subscription">ChatGPT 订阅授权原型</h2>
+    <p>实验路径通过 OpenAI 官方页面请求登录与计划推理授权，不读取本机认证文件、浏览器 Cookie 或其他应用凭据。扩展会接收并验证账号身份与授权凭据，用于模型目录和用户主动触发的分类。</p>
+    <p>Access、refresh、ID token 只在当前扩展界面运行时内存中保留，不写入浏览器存储、不参与同步、不交给开发者；关闭界面后需重新登录。账号标签、返回的邮箱、已验证的 subject、issued client ID 及本机 host UUID 保存在 <code>chrome.storage.local</code>，可通过清理扩展本地数据删除。</p>
+    <p>登录时按需请求 auth.openai.com、api.openai.com 与 127.0.0.1 的访问权限。临时跳转规则限定本次登录标签页和精确回调地址，在正常完成、取消、超时或页面关闭时移除，不截获其他标签页的登录。浏览器适配尚待真实账号验证。</p>
+    <p>退出会清除本页会话并尝试远端撤销；未确认撤销时会提示到 ChatGPT 设置中断开。关闭页面不等于撤销官方授权。模型目录不代表实际推理权限或额度，请求不会自动改用 API Key 计费；Responses 设置 store=false，第三方保留仍以 OpenAI 政策为准。</p>
   </section>
 
   <section aria-labelledby="native">

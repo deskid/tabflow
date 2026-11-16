@@ -46,7 +46,7 @@ export interface GroupingUndoState {
 }
 
 export interface AISettings {
-  provider: 'codex_native' | 'heuristic' | 'chrome_builtin' | 'openai' | 'deepseek' | 'custom';
+  provider: 'codex_native' | 'chatgpt_plan' | 'heuristic' | 'chrome_builtin' | 'openai' | 'deepseek' | 'custom';
   apiKey?: string;
   apiEndpoint?: string;
   model?: string;
@@ -347,6 +347,12 @@ export async function planGroupByAI(tabs: TabData[], settings?: AISettings): Pro
   // 1. Prioritize Native Codex Bridge
   if (provider === 'codex_native') {
     return planGroupByCodexNative(tabs, customPrompt, model);
+  }
+
+  // Browser-only ChatGPT plan prototype; never routes through the native host or API-key billing.
+  if (provider === 'chatgpt_plan') {
+    const { planGroupByChatGPTPlan } = await import('./chatgptPlan');
+    return planGroupByChatGPTPlan(tabs, { model, customPrompt });
   }
 
   // 2. Chrome Built-in Prompt API

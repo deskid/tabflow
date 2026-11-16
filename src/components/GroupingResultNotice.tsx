@@ -8,7 +8,7 @@ interface Props {
 }
 
 const ENGINE_NAMES = {
-  codex_native: '本机 Codex', chrome_builtin: 'Chrome 端侧模型', custom: '自定义 API',
+  codex_native: '本机 Codex', chatgpt_plan: 'ChatGPT 订阅', chrome_builtin: 'Chrome 端侧模型', custom: '自定义 API',
   openai: 'OpenAI', deepseek: 'DeepSeek', heuristic: '本地规则',
 };
 

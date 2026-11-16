@@ -19,6 +19,7 @@ export default defineConfig({
         sidepanel: resolve(rootDir, 'sidepanel.html'),
         popup: resolve(rootDir, 'popup.html'),
         options: resolve(rootDir, 'options.html'),
+        oauth: resolve(rootDir, 'oauth-callback.html'),
         background: resolve(rootDir, 'src/background/index.ts'),
       },
       output: {
