@@ -129,7 +129,7 @@ pnpm build
 | `pnpm package:store` | 构建并生成商店上传 ZIP |
 | `pnpm audit` | 检查依赖中的已知漏洞 |
 
-上传包输出到 `artifacts/chrome-web-store/tabflow-<版本>-chrome-web-store.zip`，清单位于 ZIP 根目录。打包保留构建清单中的公钥，不修改 `dist`；本机桥接需要单独安装。
+上传包输出到 `artifacts/chrome-web-store/tabflow-<版本>-chrome-web-store.zip`，清单位于 ZIP 根目录。商店上传 ZIP 移除 `key`，开发构建 `dist` 保留源码公钥；用于加载已解压扩展的实验预览包也保留开发公钥以稳定扩展 ID。本机模式的桥接需单独安装，订阅模式不依赖该桥接。
 
 ### GitHub Actions 自动出包
 

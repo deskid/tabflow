@@ -63,11 +63,15 @@ export async function packageStore({ rootDir = projectRoot, outputDir } = {}) {
     if (image.length < 24 || !image.subarray(0, 8).equals(pngSignature)
       || image.readUInt32BE(16) !== Number(size) || image.readUInt32BE(20) !== Number(size)) throw new Error('Manifest icons must be real PNG files of the declared size.');
   }
-  // Keep the built manifest unchanged, including its public extension key.
+  // Chrome Web Store rejects packages whose manifest.json contains "key"; strip it only from the archive copy.
+  const { key: _ignoredKey, ...storeManifest } = manifest;
   const entries = [];
   for (const name of await filesUnder(dist)) {
     if (/(^|\/)(?:node_modules|\.pnpm-store|tests|scripts|\.git)(\/|$)|(^|\/)\.env|\.(?:map|pem|key|log)$/iu.test(name)) throw new Error(`Unexpected private/development artifact in build: ${name}`);
-    entries.push({ name, data: await readFile(path.join(dist, name)) });
+    const data = name === 'manifest.json'
+      ? Buffer.from(`${JSON.stringify(storeManifest, null, 2)}\n`, 'utf8')
+      : await readFile(path.join(dist, name));
+    entries.push({ name, data });
   }
   entries.push({ name: 'LICENSE', data: await readFile(path.join(root, 'LICENSE')) });
   const directory = outputDir ? path.resolve(outputDir) : path.join(root, 'artifacts', 'chrome-web-store');
@@ -75,7 +79,7 @@ export async function packageStore({ rootDir = projectRoot, outputDir } = {}) {
   const filename = path.join(directory, `tabflow-${manifest.version}-chrome-web-store.zip`);
   const archive = makeZip(entries);
   await writeFile(filename, archive);
-  return { path: filename, version: manifest.version, files: entries.length, bytes: archive.length, publicKeyIncluded: Boolean(manifest.key) };
+  return { path: filename, version: manifest.version, files: entries.length, bytes: archive.length, publicKeyIncluded: false };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -14,17 +14,32 @@ export class BridgeError extends Error {
 export function resolveCodex(env = process.env) {
   if (env.TABFLOW_CODEX_EXECUTABLE) {
     if (!path.isAbsolute(env.TABFLOW_CODEX_EXECUTABLE) || !existsSync(env.TABFLOW_CODEX_EXECUTABLE))
-      throw new BridgeError('CODEX_NOT_FOUND', 'Configured Codex executable does not exist. Run install-native-host.ps1 again.');
+      throw new BridgeError('CODEX_NOT_FOUND', 'Configured Codex executable does not exist. Re-run the native host installer.');
     return { command: env.TABFLOW_CODEX_EXECUTABLE, args: [] };
   }
-  const npmRoot = path.join(env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'node_modules', '@openai', 'codex');
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-  const triple = arch === 'arm64' ? 'aarch64' : 'x86_64';
-  const exe = path.join(npmRoot, 'node_modules', '@openai', `codex-win32-${arch}`, 'vendor', `${triple}-pc-windows-msvc`, 'bin', 'codex.exe');
-  if (process.platform === 'win32' && existsSync(exe)) return { command: exe, args: [] };
-  const cli = env.TABFLOW_CODEX_CLI || path.join(npmRoot, 'bin', 'codex.js');
-  if (path.isAbsolute(cli) && existsSync(cli)) return { command: process.execPath, args: [cli] };
-  throw new BridgeError('CODEX_NOT_FOUND', 'Official Codex CLI was not found. Install it and rerun install-native-host.ps1.');
+  if (process.platform === 'win32') {
+    const npmRoot = path.join(env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'node_modules', '@openai', 'codex');
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const triple = arch === 'arm64' ? 'aarch64' : 'x86_64';
+    const exe = path.join(npmRoot, 'node_modules', '@openai', `codex-win32-${arch}`, 'vendor', `${triple}-pc-windows-msvc`, 'bin', 'codex.exe');
+    if (existsSync(exe)) return { command: exe, args: [] };
+    const cli = env.TABFLOW_CODEX_CLI || path.join(npmRoot, 'bin', 'codex.js');
+    if (path.isAbsolute(cli) && existsSync(cli)) return { command: process.execPath, args: [cli] };
+  } else {
+    if (env.TABFLOW_CODEX_CLI && path.isAbsolute(env.TABFLOW_CODEX_CLI) && existsSync(env.TABFLOW_CODEX_CLI)) {
+      return { command: process.execPath, args: [env.TABFLOW_CODEX_CLI] };
+    }
+    const candidates = [
+      '/opt/homebrew/bin/codex',
+      '/usr/local/bin/codex',
+      path.join(os.homedir(), '.local', 'bin', 'codex'),
+      path.join(os.homedir(), '.npm-global', 'bin', 'codex'),
+    ];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return { command: candidate, args: [] };
+    }
+  }
+  throw new BridgeError('CODEX_NOT_FOUND', 'Official Codex CLI was not found. Install it and re-run the native host installer.');
 }
 
 // Disable local execution and integrations before any thread is created. Auth remains

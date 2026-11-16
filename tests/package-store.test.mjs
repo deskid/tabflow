@@ -37,7 +37,7 @@ function unzipStored(buffer) {
   return files;
 }
 
-test('store ZIP is valid, preserves the built manifest and public key, and leaves source unchanged', async () => {
+test('store ZIP is valid, strips public key from packaged manifest, and leaves source unchanged', async () => {
   const root = await fixture();
   try {
     const result = await packageStore({ rootDir: root });
@@ -46,10 +46,9 @@ test('store ZIP is valid, preserves the built manifest and public key, and leave
     assert.ok(files.has('manifest.json'));
     assert.ok(files.has('LICENSE'));
     const manifest = JSON.parse(files.get('manifest.json'));
-    assert.equal(manifest.key, 'development-public-key');
-    assert.equal(result.publicKeyIncluded, true);
+    assert.equal('key' in manifest, false);
+    assert.equal(result.publicKeyIncluded, false);
     assert.equal(result.path, path.join(root, 'artifacts', 'chrome-web-store', 'tabflow-1.1.0-chrome-web-store.zip'));
-    assert.deepEqual(files.get('manifest.json'), await readFile(path.join(root, 'dist', 'manifest.json')));
     assert.deepEqual(manifest.permissions, ['tabs']);
     assert.equal(JSON.parse(await readFile(path.join(root, 'dist', 'manifest.json'))).key, 'development-public-key');
     assert.ok([...files.keys()].every((name) => !name.startsWith('dist/')));
@@ -67,7 +66,6 @@ test('packaging an optional-key manifest does not invent an extension identity',
     const result = await packageStore({ rootDir: root });
     const files = unzipStored(await readFile(result.path));
     assert.equal(result.publicKeyIncluded, false);
-    assert.deepEqual(files.get('manifest.json'), await readFile(file));
     assert.equal(JSON.parse(files.get('manifest.json')).key, undefined);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

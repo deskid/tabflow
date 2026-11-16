@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Check, CheckCircle2, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import { BuiltinModelStatus } from './BuiltinModelStatus';
 import {
   getChatGPTPlanAccounts, getChatGPTPlanStatus, signInChatGPTPlan,
@@ -7,7 +7,7 @@ import {
 } from '../services/chatgptPlanAuth';
 import {
   APIAccessRequiredError, getAPIModels, getLocalCodexStatus,
-  type AISettings, type CodexModel,
+  type AISettings, type CodexAccount, type CodexModel,
 } from '../services/aiGrouper';
 
 async function getChatGPTPlanModels() {
@@ -19,6 +19,13 @@ interface Props {
   active: boolean;
   settings: AISettings;
   onUpdate: (updates: Partial<AISettings>) => void;
+}
+
+interface CodexGuide {
+  title: string;
+  detail: string;
+  command?: string;
+  note?: string;
 }
 
 const PROVIDERS: Array<{ id: AISettings['provider']; label: string }> = [
@@ -221,6 +228,64 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
   );
 }
 
+const REMOTE_MAC_INSTALLER = 'https://raw.githubusercontent.com/deskid/tabflow/main/scripts/install-native-host.sh';
+
+function getInstallCommand(): string {
+  const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+  const extId = typeof chrome !== 'undefined' && chrome.runtime?.id ? chrome.runtime.id : '';
+  if (isMac) {
+    return extId && extId !== 'pnjgkehmcfheoecnhenfeidkpkdjifkm'
+      ? `curl -fsSL ${REMOTE_MAC_INSTALLER} | bash -s -- ${extId}`
+      : `curl -fsSL ${REMOTE_MAC_INSTALLER} | bash`;
+  }
+  return extId
+    ? `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-native-host.ps1 -ExtensionId ${extId}`
+    : 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-native-host.ps1';
+}
+
+function getCodexGuide(
+  error: string,
+  errorCodes: string[],
+  account?: CodexAccount,
+): CodexGuide | null {
+  const lower = error.toLowerCase();
+  if (
+    lower.includes('native messaging host not found')
+    || lower.includes('native host has exited')
+    || lower.includes('access to the specified native messaging host is forbidden')
+  ) {
+    const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+    return {
+      title: '未检测到本机 Codex 桥接',
+      detail: isMac
+        ? '请先确认本机已登录 codex，打开「终端」运行下方命令后再点击重新检测：'
+        : '请先在当前用户下完成 codex login，并在项目根目录运行下方安装命令：',
+      command: getInstallCommand(),
+      note: isMac
+        ? '脚本将下载桥接文件到 ~/Library/Application Support/TabFlow/，为浏览器注册 Native Messaging Host，并自动检测本机 Codex 状态。'
+        : '脚本将为当前用户生成启动器并注册 Chrome Native Messaging Host，无需管理员权限。',
+    };
+  }
+  if (errorCodes.includes('CODEX_NOT_FOUND')) {
+    return {
+      title: '未检测到官方 Codex CLI',
+      detail: '请先安装官方 Codex CLI 并完成登录，然后重新运行桥接安装脚本。',
+      command: 'codex login',
+    };
+  }
+  if (
+    errorCodes.includes('NOT_LOGGED_IN')
+    || (account && !account.loggedIn && account.requiresOpenaiAuth !== false)
+  ) {
+    return {
+      title: '本机 Codex 尚未登录',
+      detail: '请在终端运行下方命令完成登录，然后点击重新检测：',
+      command: 'codex login',
+    };
+  }
+  return null;
+}
+
 export function AIProviderSettings({ active, settings, onUpdate }: Props) {
   const { provider, apiEndpoint = '', apiKey = '', model = '' } = settings;
   const isAPI = provider === 'custom' || provider === 'openai' || provider === 'deepseek';
@@ -231,8 +296,11 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
   const [needsAccess, setNeedsAccess] = useState(false);
   const [connected, setConnected] = useState(false);
   const [codexStatus, setCodexStatus] = useState('');
+  const [codexGuide, setCodexGuide] = useState<CodexGuide | null>(null);
+  const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState(false);
   const requestId = useRef(0);
+  const copyTimer = useRef<number | null>(null);
 
   const loadModels = useCallback(async (requestPermission: boolean) => {
     const id = ++requestId.current;
@@ -241,6 +309,7 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
     setNeedsAccess(false);
     setConnected(false);
     setCodexStatus('');
+    setCodexGuide(null);
     try {
       if (provider === 'codex_native') {
         const result = await getLocalCodexStatus();
@@ -251,8 +320,11 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
         setCodexStatus(result.error ? '' : account
           ? account.loggedIn ? '已登录' : account.requiresOpenaiAuth === false ? '使用本机提供商配置' : '未登录'
           : '账号状态未确认');
-        const errors = [result.error, result.accountError, result.modelsError].filter(Boolean);
-        setError(errors.join('；') || (account && !account.loggedIn && account.requiresOpenaiAuth !== false ? '请先登录本机 Codex' : ''));
+        const errors = [result.error, result.accountError, result.modelsError].filter(Boolean) as string[];
+        const codes = [result.accountErrorCode, result.modelsErrorCode].filter(Boolean) as string[];
+        const mergedError = errors.join('；') || (account && !account.loggedIn && account.requiresOpenaiAuth !== false ? '请先登录本机 Codex' : '');
+        setError(mergedError);
+        setCodexGuide(getCodexGuide(mergedError, codes, account));
       } else {
         const result = await getAPIModels({ provider, apiEndpoint, apiKey }, { requestPermission });
         if (id !== requestId.current) return;
@@ -276,6 +348,7 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
     setNeedsAccess(false);
     setConnected(false);
     setCodexStatus('');
+    setCodexGuide(null);
     setLoading(false);
     setManual(false);
     if (!active || !hasModels || (provider === 'custom' && !apiEndpoint.trim()) ||
@@ -284,10 +357,27 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
     return () => { window.clearTimeout(timer); requestId.current++; };
   }, [active, hasModels, provider, apiEndpoint, apiKey, loadModels]);
 
+  useEffect(() => () => {
+    if (copyTimer.current) window.clearTimeout(copyTimer.current);
+  }, []);
+
+  const handleCopyCommand = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (copyTimer.current) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Clipboard may be unavailable in restricted contexts; text remains selectable.
+    }
+  };
+
   const savedModelMissing = !!model && !models.some((item) => item.id === model);
-  const status = loading ? '正在获取模型…' : provider === 'codex_native'
-    ? `${codexStatus}${models.length ? `${codexStatus ? '，' : ''}${models.length} 个模型` : ''}`
-    : connected ? `已连接${models.length ? `，${models.length} 个模型` : ''}` : needsAccess ? '等待连接' : '';
+  const status = loading
+    ? (provider === 'codex_native' ? '正在连接本机 Codex…' : '正在获取模型…')
+    : provider === 'codex_native'
+      ? `${codexStatus}${models.length ? `${codexStatus ? '，' : ''}${models.length} 个模型` : ''}`
+      : connected ? `已连接${models.length ? `，${models.length} 个模型` : ''}` : needsAccess ? '等待连接' : '';
 
   return (
     <section className="space-y-3">
@@ -350,7 +440,41 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
           {status && <div role="status" className="flex items-center gap-1.5 text-[12px] text-[var(--text-medium)]">
             {connected && !loading && <CheckCircle2 size={13} className="text-[var(--success-text)]" />}{status}
           </div>}
-          {error && <p role="alert" className="text-[12px] text-[var(--text-medium)] break-words">{error}</p>}
+          {codexGuide ? (
+            <div role="alert" className="space-y-2 rounded-md border-hairline border-[var(--border-subtle)] bg-[var(--app-bg)] p-2.5 text-[12px] text-[var(--text-medium)]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-[var(--text-high)]">{codexGuide.title}</span>
+                <button type="button" disabled={loading} onClick={() => { void loadModels(true); }}
+                  className="shrink-0 text-[var(--accent-text)] disabled:opacity-50">
+                  重新检测
+                </button>
+              </div>
+              <p className="leading-relaxed">{codexGuide.detail}</p>
+              {codexGuide.command && (
+                <div className="flex items-center gap-2 rounded border-hairline border-[var(--border-subtle)] bg-[var(--surface)] px-2 py-1.5">
+                  <code className="min-w-0 flex-1 select-all truncate text-[12px] text-[var(--text-high)]">
+                    {codexGuide.command}
+                  </code>
+                  <button type="button" onClick={() => { void handleCopyCommand(codexGuide.command!); }}
+                    className="flex shrink-0 items-center gap-1 text-[12px] text-[var(--accent-text)]">
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    {copied ? '已复制' : '复制'}
+                  </button>
+                </div>
+              )}
+              {codexGuide.note && (
+                <p className="leading-relaxed opacity-80">{codexGuide.note}</p>
+              )}
+              {error && (
+                <details>
+                  <summary className="cursor-pointer">技术详情</summary>
+                  <p className="mt-1 select-text break-words">{error}</p>
+                </details>
+              )}
+            </div>
+          ) : (
+            error && <p role="alert" className="text-[12px] text-[var(--text-medium)] break-words">{error}</p>
+          )}
         </div>
       )}
     </section>
