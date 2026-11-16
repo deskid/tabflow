@@ -30,7 +30,7 @@
 <main>
   <header>
     <h1>TabFlow 隐私与数据说明</h1>
-    <p>适用版本：1.2.0 授权原型（尚未发布）。个人开发者：deskid。联系邮箱：<a href="mailto:deskidzhou@gmail.com">deskidzhou@gmail.com</a>。</p>
+    <p>适用版本：1.2.1 授权原型（尚未发布）。个人开发者：deskid。联系邮箱：<a href="mailto:deskidzhou@gmail.com">deskidzhou@gmail.com</a>。</p>
     <div class="intro">TabFlow 用于整理浏览会话，包括标签、原生标签组、书签和稍后读。普通管理与本地规则分类无需 Codex 或 API Key；可选模型能力有不同的数据处理路径。</div>
   </header>
 
@@ -66,7 +66,7 @@
     <h2 id="subscription">ChatGPT 订阅授权原型</h2>
     <p>实验路径通过 OpenAI 官方页面请求登录与计划推理授权，不读取本机认证文件、浏览器 Cookie 或其他应用凭据。扩展会接收并验证账号身份与授权凭据，用于模型目录和用户主动触发的分类。</p>
     <p>Access、refresh、ID token 只在当前扩展界面运行时内存中保留，不写入浏览器存储、不参与同步、不交给开发者；关闭界面后需重新登录。账号标签、返回的邮箱、已验证的 subject、issued client ID 及本机 host UUID 保存在 <code>chrome.storage.local</code>，可通过清理扩展本地数据删除。</p>
-    <p>登录时按需请求 auth.openai.com、api.openai.com 与 127.0.0.1 的访问权限。临时跳转规则限定本次登录标签页和精确回调地址，在正常完成、取消、超时或页面关闭时移除，不截获其他标签页的登录。浏览器适配尚待真实账号验证。</p>
+    <p>登录时按需请求 auth.openai.com、api.openai.com 与 127.0.0.1 的访问权限。临时跳转规则限定本次登录标签页和精确回调地址，在正常完成、取消、超时或页面关闭时移除，不截获其他标签页的登录。已通过用户初次登录与模型目录验证，实际分类及续期仍待验证。</p>
     <p>退出会清除本页会话并尝试远端撤销；未确认撤销时会提示到 ChatGPT 设置中断开。关闭页面不等于撤销官方授权。模型目录不代表实际推理权限或额度，请求不会自动改用 API Key 计费；Responses 设置 store=false，第三方保留仍以 OpenAI 政策为准。</p>
   </section>
 

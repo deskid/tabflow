@@ -7,6 +7,13 @@ const API_ORIGIN = 'https://api.openai.com';
 const COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan'] as const;
 const MAX_RESPONSE_CHARS = 2_000_000;
 
+function mediaType(response: Response): string {
+  const value = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+  return value && value.length <= 96 && /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(value) ? value : '未提供';
+}
+
+type ResponseShape = 'error_object' | 'detail_object' | 'response_object' | 'sse_error' | 'http_error';
+
 function authRequired(message: string): Error {
   const error = new Error(message);
   error.name = 'BootstrapRequiredError';
@@ -18,7 +25,7 @@ export class ChatGPTPlanAPIError extends Error {
   readonly code?: string;
   readonly requestId?: string;
 
-  constructor(status: number, code?: string, requestId?: string) {
+  constructor(status: number, code?: string, requestId?: string, diagnostic?: { contentType: string; shape: ResponseShape }) {
     const descriptions: Record<string, string> = {
       subscription_sharing_user_not_eligible: '当前账号或工作区未获准使用 ChatGPT 订阅推理。',
       subscription_sharing_usage_limit_exceeded: '本应用的订阅用量已达限制，请在 ChatGPT 用量设置中查看。',
@@ -32,7 +39,8 @@ export class ChatGPTPlanAPIError extends Error {
     };
     const safeCode = code && /^[a-z][a-z0-9_]{0,95}$/.test(code) ? code : undefined;
     const safeRequestId = requestId && /^[A-Za-z0-9_-]{1,128}$/.test(requestId) ? requestId : undefined;
-    super(`${safeCode && descriptions[safeCode] ? descriptions[safeCode] : `ChatGPT 订阅接口返回 HTTP ${status}。`}${safeCode ? `（${safeCode}）` : ''}${safeRequestId ? ` 请求编号：${safeRequestId}` : ''}`);
+    const generic = status >= 200 && status < 300 ? 'ChatGPT 订阅接口返回了错误或未完成结果。' : 'ChatGPT 订阅接口请求失败。';
+    super(`${safeCode && descriptions[safeCode] ? descriptions[safeCode] : generic}（HTTP ${status}${safeCode ? `；${safeCode}` : ''}）${diagnostic ? ` 响应类型：${diagnostic.contentType}；响应形状：${diagnostic.shape}。` : ''}${safeRequestId ? ` 请求编号：${safeRequestId}` : ''}`);
     this.name = 'ChatGPTPlanAPIError';
     this.status = status;
     this.code = safeCode;
@@ -113,43 +121,80 @@ export async function getChatGPTPlanModels(): Promise<CodexModel[]> {
   });
 }
 
-function completedOutput(response: unknown): string {
-  const value = response as { output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }> } | undefined;
-  return (value?.output ?? []).filter((item) => item?.type === 'message')
-    .flatMap((item) => item.content ?? []).filter((part) => part?.type === 'output_text' && typeof part.text === 'string')
-    .map((part) => part.text).join('');
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** No partial text, EOF or [DONE] marker can stand in for response.completed. */
-export async function readChatGPTPlanResponse(response: Response): Promise<string> {
-  if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
-    throw new Error('订阅分类接口没有返回预期的事件流。');
+/** Include only response metadata, never an upstream body, prompt or credential. */
+function responseProblem(response: Response, message: string): Error {
+  const contentType = mediaType(response);
+  const rawId = response.headers.get('x-request-id');
+  const requestId = rawId && /^[A-Za-z0-9_-]{1,128}$/.test(rawId) ? rawId : undefined;
+  return new Error(`${message}（HTTP ${response.status}；响应类型：${contentType}${requestId ? `；请求编号：${requestId}` : ''}）`);
+}
+
+function errorCode(value: unknown): string | undefined {
+  return record(value) && typeof value.code === 'string' ? value.code : undefined;
+}
+
+function finalOutput(value: unknown, response: Response): string {
+  if (!record(value)) throw responseProblem(response, '订阅响应缺少有效的 Responses 对象。');
+  if (value.error || (value.incomplete_details !== null && value.incomplete_details !== undefined) ||
+      value.status === 'failed' || value.status === 'incomplete' || value.status === 'cancelled') {
+    throw new ChatGPTPlanAPIError(response.status, errorCode(value.error) ?? 'incomplete_response',
+      response.headers.get('x-request-id') ?? undefined, { contentType: mediaType(response), shape: 'response_object' });
   }
+  if (value.status !== 'completed') throw responseProblem(response, '订阅响应没有确认完成状态。');
+  if (!Array.isArray(value.output)) throw responseProblem(response, '订阅响应缺少最终 output 列表。');
+  const messages = value.output.filter((item) => record(item) && item.type === 'message');
+  let text = '';
+  for (const message of messages) {
+    if (!record(message) || (message.status !== undefined && message.status !== 'completed') || !Array.isArray(message.content)) {
+      throw responseProblem(response, '订阅响应包含未完成或格式无效的最终消息。');
+    }
+    for (const part of message.content) {
+      if (!record(part)) throw responseProblem(response, '订阅响应包含格式无效的消息内容。');
+      if (part.type === 'refusal') throw responseProblem(response, '订阅模型拒绝输出，本次结果未被应用。');
+      if (part.type === 'output_text') {
+        if (typeof part.text !== 'string') throw responseProblem(response, '订阅响应包含格式无效的最终文本。');
+        text += part.text;
+      }
+    }
+  }
+  if (!text.trim()) throw responseProblem(response, '订阅模型没有返回分组内容。');
+  return text;
+}
+
+/** The body must prove completion; MIME alone, EOF and partial deltas cannot. */
+export async function readChatGPTPlanResponse(response: Response): Promise<string> {
+  if (!response.body) throw responseProblem(response, '订阅分类接口返回空响应。');
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = '';
   let output = '';
   let received = 0;
   let complete = false;
+  let format: 'sse' | 'json' | undefined;
 
   const processFrame = (frame: string): boolean => {
     const lines = frame.replace(/\r\n/g, '\n').split('\n');
     const data = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).replace(/^ /, '')).join('\n');
     if (!data || data === '[DONE]') return false;
-    let event: { type?: string; delta?: string; error?: { code?: string }; code?: string; response?: { status?: string; error?: { code?: string }; incomplete_details?: { reason?: string } } };
-    try { event = JSON.parse(data); } catch { throw new Error('订阅分类事件流包含无效 JSON。'); }
-    if (['response.failed', 'response.incomplete', 'error', 'response.error'].includes(event.type ?? '')) {
+    let event: unknown;
+    try { event = JSON.parse(data); } catch { throw responseProblem(response, '订阅分类事件流包含无效 JSON。'); }
+    if (!record(event)) throw responseProblem(response, '订阅分类事件不是有效对象。');
+    if (['response.failed', 'response.incomplete', 'error', 'response.error'].includes(String(event.type))) {
       throw new ChatGPTPlanAPIError(response.status,
-        event.response?.error?.code ?? event.error?.code ?? event.code ?? (event.type === 'response.incomplete' ? 'incomplete_response' : undefined),
-        response.headers.get('x-request-id') ?? undefined);
+        errorCode(record(event.response) ? event.response.error : undefined) ?? errorCode(event.error) ??
+        (typeof event.code === 'string' ? event.code : undefined) ?? (event.type === 'response.incomplete' ? 'incomplete_response' : undefined),
+        response.headers.get('x-request-id') ?? undefined, { contentType: mediaType(response), shape: 'sse_error' });
     }
     if (event.type === 'response.output_text.delta') {
-      if (typeof event.delta !== 'string') throw new Error('订阅分类事件缺少文本增量。');
+      if (typeof event.delta !== 'string') throw responseProblem(response, '订阅分类事件缺少文本增量。');
       output += event.delta;
     }
     if (event.type === 'response.completed') {
-      if (event.response?.status !== 'completed') throw new Error('订阅响应没有确认完成状态。');
-      output = completedOutput(event.response);
+      output = finalOutput(event.response, response);
       complete = true;
       return true;
     }
@@ -161,27 +206,53 @@ export async function readChatGPTPlanResponse(response: Response): Promise<strin
       const { value, done } = await reader.read();
       if (value) {
         received += value.byteLength;
-        if (received > MAX_RESPONSE_CHARS * 4) throw new Error('订阅分类响应超出大小限制。');
+        if (received > MAX_RESPONSE_CHARS * 4) throw responseProblem(response, '订阅分类响应超出大小限制。');
         pending += decoder.decode(value, { stream: true });
       }
       if (done) pending += decoder.decode();
-      // A CRLF may be split across network chunks; normalize only complete frame boundaries.
-      for (;;) {
-        const boundary = /\r?\n\r?\n/.exec(pending);
-        if (!boundary || boundary.index === undefined) break;
-        const frame = pending.slice(0, boundary.index);
-        pending = pending.slice(boundary.index + boundary[0].length);
-        if (processFrame(frame)) break;
+      if (!format && pending.trimStart()) {
+        const start = pending.trimStart();
+        if (start.startsWith('{') || start.startsWith('[')) format = 'json';
+        else if (/^(?:data:|event:|:)/.test(start)) { format = 'sse'; pending = start; }
+        else if (start.startsWith('<') || start.length > 32 || done) {
+          throw responseProblem(response, '订阅分类接口未返回可识别的 Responses JSON 或事件流。');
+        }
       }
-      if (output.length > MAX_RESPONSE_CHARS || pending.length > MAX_RESPONSE_CHARS) throw new Error('订阅分类响应超出大小限制。');
+      if (format === 'sse') {
+        // CRLF and UTF-8 characters can be split across network chunks.
+        for (;;) {
+          const boundary = /\r?\n\r?\n/.exec(pending);
+          if (!boundary || boundary.index === undefined) break;
+          const frame = pending.slice(0, boundary.index);
+          pending = pending.slice(boundary.index + boundary[0].length);
+          if (processFrame(frame)) break;
+        }
+      }
+      if (output.length > MAX_RESPONSE_CHARS || pending.length > MAX_RESPONSE_CHARS) {
+        throw responseProblem(response, '订阅分类响应超出大小限制。');
+      }
       if (complete) break;
       if (done) {
-        if (pending.trim()) processFrame(pending);
+        if (format === 'json') {
+          let json: unknown;
+          try { json = JSON.parse(pending); } catch { throw responseProblem(response, '订阅分类接口返回了无效 JSON。'); }
+          if (!record(json)) throw responseProblem(response, '订阅 JSON 不是有效的 Responses 对象。');
+          if (json.error || Object.hasOwn(json, 'detail') || json.type === 'error') {
+            throw new ChatGPTPlanAPIError(response.status, errorCode(json.error) ?? (typeof json.code === 'string' ? json.code : undefined),
+              response.headers.get('x-request-id') ?? undefined,
+              { contentType: mediaType(response), shape: Object.hasOwn(json, 'detail') ? 'detail_object' : 'error_object' });
+          }
+          if (json.object !== 'response' && json.type !== 'response.completed') {
+            throw responseProblem(response, '订阅接口返回 JSON，但不是已完成的 Responses 对象。');
+          }
+          output = finalOutput(json.type === 'response.completed' ? json.response : json, response);
+          complete = true;
+        } else if (format === 'sse' && pending.trim()) processFrame(pending);
         break;
       }
     }
-    if (!complete) throw new Error('订阅分类流在 response.completed 前结束，本次部分结果未被应用。');
-    if (!output.trim()) throw new Error('订阅模型没有返回分组内容。');
+    if (!complete) throw responseProblem(response, '订阅分类流在 response.completed 前结束，本次部分结果未被应用。');
+    if (output.length > MAX_RESPONSE_CHARS) throw responseProblem(response, '订阅分类响应超出大小限制。');
     return output;
   } finally {
     try { await reader.cancel(); } catch { /* The connection may already have failed. */ }

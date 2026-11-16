@@ -31,7 +31,7 @@ function responseStream(events, chunkSize = 100000, contentType = 'text/event-st
   return new Response(new ReadableStream({ start(controller) {
     for (let index = 0; index < bytes.length; index += chunkSize) controller.enqueue(bytes.slice(index, index + chunkSize));
     controller.close();
-  } }), { headers: { 'content-type': contentType, 'x-request-id': 'req_test_1' } });
+  } }), { headers: { ...(contentType == null ? {} : { 'content-type': contentType }), 'x-request-id': 'req_test_1' } });
 }
 const event = (value) => `data: ${JSON.stringify(value)}\r\n\r\n`;
 const completed = (output = text) => event({ type: 'response.completed', response: { status: 'completed', output: [
@@ -144,10 +144,179 @@ test('incomplete and invalid completion statuses never approve a grouping', asyn
   ]) await assert.rejects(api.readChatGPTPlanResponse(responseStream(event(value))));
 });
 
-test('wrong content types, malformed event JSON and empty model output fail', async () => {
-  await assert.rejects(api.readChatGPTPlanResponse(responseStream('{}', 10, 'application/json')), /事件流/);
+test('an invalid JSON object, malformed event JSON and empty model output fail', async () => {
+  await assert.rejects(api.readChatGPTPlanResponse(responseStream('{}', 10, 'application/json')), /Responses 对象/);
   await assert.rejects(api.readChatGPTPlanResponse(responseStream('data: {broken}\n\n')), /无效 JSON/);
   await assert.rejects(api.readChatGPTPlanResponse(responseStream(completed(''))), /没有返回分组/);
+});
+
+const finalResponse = (overrides = {}) => ({
+  object: 'response', status: 'completed', error: null, incomplete_details: null,
+  output: [{ type: 'message', status: 'completed', content: [{ type: 'output_text', text }] }],
+  ...overrides,
+});
+
+function assertSafeDiagnostic(error, status, requestId, contentType) {
+  assert.match(error.message, new RegExp(`HTTP ${status}\\b`));
+  if (requestId) assert.match(error.message, new RegExp(requestId));
+  if (contentType) assert.ok(error.message.includes(contentType), error.message);
+  assert.doesNotMatch(error.message, /MOCK_ONLY_ACCESS_TOKEN|RAW_UPSTREAM_SECRET|PRIVATE_PROMPT|UNSAFE_HEADER_SECRET/);
+  return true;
+}
+
+for (const mime of [null, 'application/json', 'text/plain', 'TEXT/EVENT-STREAM', 'Text/Event-Stream; charset=UTF-8']) {
+  test(`SSE completion is recognized by framing with MIME ${JSON.stringify(mime)}`, async () => {
+    assert.equal(await api.readChatGPTPlanResponse(responseStream(
+      ': heartbeat\r\n\r\n' + event({ type: 'response.output_text.delta', delta: 'partial' }) + completed(), 1, mime,
+    )), text);
+  });
+}
+
+for (const mime of ['application/json', 'Application/JSON; charset=UTF-8', 'text/event-stream', null]) {
+  test(`complete Responses JSON preserves ordered text and reasoning with MIME ${JSON.stringify(mime)}`, async () => {
+    const split = Math.floor(text.length / 2);
+    const value = finalResponse({ output: [
+      { type: 'reasoning', summary: [{ type: 'summary_text', text: 'PRIVATE_PROMPT' }] },
+      { type: 'function_call', name: 'ignored_tool_item', arguments: '{}' },
+      { type: 'future_item', text: 'ignored unknown output item' },
+      { type: 'message', status: 'completed', content: [
+        { type: 'output_text', text: text.slice(0, split) },
+        { type: 'output_text', text: text.slice(split, -1) },
+      ] },
+      { type: 'message', status: 'completed', content: [{ type: 'output_text', text: text.slice(-1) }] },
+    ] });
+    globalThis.fetch = async () => responseStream(JSON.stringify(value), 1, mime);
+    assert.deepEqual(await api.planGroupByChatGPTPlan(tabs, { model: 'account-model-selected' }), groups);
+  });
+}
+
+test('a JSON response.completed envelope requires and accepts its final response', async () => {
+  const value = { type: 'response.completed', response: finalResponse() };
+  assert.equal(await api.readChatGPTPlanResponse(responseStream(JSON.stringify(value), 3, 'application/json')), text);
+});
+
+for (const [label, value] of [
+  ['error', { error: { code: 'subscription_sharing_usage_limit_exceeded', message: 'RAW_UPSTREAM_SECRET MOCK_ONLY_ACCESS_TOKEN PRIVATE_PROMPT' } }],
+  ['detail', { detail: 'RAW_UPSTREAM_SECRET MOCK_ONLY_ACCESS_TOKEN PRIVATE_PROMPT' }],
+]) {
+  test(`HTTP 200 JSON ${label} remains a safe failure`, async () => {
+    globalThis.fetch = async () => responseStream(JSON.stringify(value), 7, 'application/json');
+    await assert.rejects(api.planGroupByChatGPTPlan(tabs, { model: 'account-model-selected' }), error => {
+      assert.ok(error instanceof api.ChatGPTPlanAPIError);
+      assert.equal(error.status, 200);
+      assert.equal(error.requestId, 'req_test_1');
+      if (label === 'error') assert.equal(error.code, 'subscription_sharing_usage_limit_exceeded');
+      return assertSafeDiagnostic(error, 200, 'req_test_1');
+    });
+  });
+}
+
+for (const [label, body, status, mime, expectedMime] of [
+  ['HTML', '<html>RAW_UPSTREAM_SECRET MOCK_ONLY_ACCESS_TOKEN PRIVATE_PROMPT</html>', 200, 'Text/HTML; charset=UTF-8', 'text/html'],
+  ['unknown framing', 'RAW_UPSTREAM_SECRET MOCK_ONLY_ACCESS_TOKEN PRIVATE_PROMPT', 200, 'application/octet-stream', 'application/octet-stream'],
+  ['empty 204', null, 204, null, '未提供'],
+  ['empty 200', '', 200, 'application/json', 'application/json'],
+  ['unsafe MIME', '<html>RAW_UPSTREAM_SECRET</html>', 200, 'text/html UNSAFE_HEADER_SECRET', '未提供'],
+  ['MIME parameters', '<html>RAW_UPSTREAM_SECRET</html>', 200, 'TEXT/HTML; secret=UNSAFE_HEADER_SECRET', 'text/html'],
+  ['oversized MIME', '<html>RAW_UPSTREAM_SECRET</html>', 200, `${'a'.repeat(97)}/json`, '未提供'],
+]) {
+  test(`${label} diagnostics contain only safe response metadata`, async () => {
+    const response = new Response(body, { status, headers: {
+      ...(mime === null ? {} : { 'content-type': mime }), 'x-request-id': 'req_safe_diagnostic',
+    } });
+    // Response supplies text/plain automatically for string bodies only.
+    if (mime === null) response.headers.delete('content-type');
+    await assert.rejects(api.readChatGPTPlanResponse(response), error =>
+      assertSafeDiagnostic(error, status, 'req_safe_diagnostic', expectedMime));
+  });
+}
+
+test('unsafe request IDs are omitted from diagnostics', async () => {
+  const response = new Response('<html>RAW_UPSTREAM_SECRET</html>', { headers: {
+    'content-type': 'text/html', 'x-request-id': 'req UNSAFE_HEADER_SECRET',
+  } });
+  await assert.rejects(api.readChatGPTPlanResponse(response), error => assertSafeDiagnostic(error, 200, undefined, 'text/html'));
+});
+
+for (const [label, value] of [
+  ['missing output', finalResponse({ output: undefined })],
+  ['wrong output type', finalResponse({ output: {} })],
+  ['empty output', finalResponse({ output: [] })],
+  ['wrong root object', finalResponse({ object: 'other' })],
+  ['missing status', finalResponse({ status: undefined })],
+  ['partial status', finalResponse({ status: 'partial' })],
+  ['queued status', finalResponse({ status: 'queued' })],
+  ['in progress status', finalResponse({ status: 'in_progress' })],
+  ['cancelled status', finalResponse({ status: 'cancelled' })],
+  ['incomplete status', finalResponse({ status: 'incomplete' })],
+  ['failed status', finalResponse({ status: 'failed' })],
+  ['error despite completed', finalResponse({ error: { code: 'subscription_sharing_usage_limit_exceeded' } })],
+  ['incomplete details despite completed', finalResponse({ incomplete_details: { reason: 'max_output_tokens' } })],
+  ['empty text', finalResponse({ output: [{ type: 'message', content: [{ type: 'output_text', text: '' }] }] })],
+  ['whitespace text', finalResponse({ output: [{ type: 'message', content: [{ type: 'output_text', text: ' \n\t' }] }] })],
+  ['wrong text type', finalResponse({ output: [{ type: 'message', content: [{ type: 'output_text', text: { groups } }] }] })],
+  ['wrong content type', finalResponse({ output: [{ type: 'message', content: {} }] })],
+  ['malformed text alongside valid text', finalResponse({ output: [{ type: 'message', content: [
+    { type: 'output_text', text }, { type: 'output_text', text: 123 },
+  ] }] })],
+  ['refusal alongside valid text', finalResponse({ output: [{ type: 'message', content: [
+    { type: 'output_text', text }, { type: 'refusal', refusal: 'RAW_UPSTREAM_SECRET' },
+  ] }] })],
+  ['only unknown output items', finalResponse({ output: [{ type: 'future_item', text }] })],
+  ['unfinished message', finalResponse({ output: [{ type: 'message', status: 'in_progress', content: [{ type: 'output_text', text }] }] })],
+  ['bare groups', { groups }],
+  ['bare output_text', { output_text: text }],
+  ['bare completed output', { status: 'completed', output: finalResponse().output }],
+  ['array', [finalResponse()]],
+  ['missing terminal response', { type: 'response.completed' }],
+]) {
+  test(`JSON rejects ${label}`, async () => {
+    await assert.rejects(api.readChatGPTPlanResponse(responseStream(JSON.stringify(value), 17, 'application/json')));
+  });
+}
+
+for (const [label, overrides] of [
+  ['partial', { status: 'partial' }],
+  ['queued', { status: 'queued' }],
+  ['cancelled', { status: 'cancelled' }],
+  ['incomplete details', { incomplete_details: { reason: 'max_output_tokens' } }],
+  ['missing output', { output: undefined }],
+  ['wrong output type', { output: {} }],
+  ['wrong message content type', { output: [{ type: 'message', content: {} }] }],
+  ['malformed text alongside valid text', { output: [{ type: 'message', content: [
+    { type: 'output_text', text }, { type: 'output_text', text: 123 },
+  ] }] }],
+  ['refusal alongside valid text', { output: [{ type: 'message', content: [
+    { type: 'output_text', text }, { type: 'refusal', refusal: 'RAW_UPSTREAM_SECRET' },
+  ] }] }],
+]) {
+  test(`SSE rejects a completed frame carrying ${label}`, async () => {
+    await assert.rejects(api.readChatGPTPlanResponse(responseStream(
+      event({ type: 'response.output_text.delta', delta: text }) +
+      event({ type: 'response.completed', response: finalResponse(overrides) }), 11,
+    )));
+  });
+}
+
+test('oversized JSON is rejected before EOF and cancels the response reader', async () => {
+  let pulls = 0;
+  let cancelled = false;
+  const chunk = new TextEncoder().encode('x'.repeat(64_000));
+  const response = new Response(new ReadableStream({
+    pull(controller) {
+      pulls++;
+      if (pulls === 1) controller.enqueue(new TextEncoder().encode('{"object":"response","padding":"'));
+      else if (pulls < 200) controller.enqueue(chunk);
+      else controller.close();
+    },
+    cancel() { cancelled = true; },
+  }), { headers: { 'content-type': 'application/json', 'x-request-id': 'req_too_large' } });
+  await assert.rejects(api.readChatGPTPlanResponse(response), error => {
+    assert.match(error.message, /大小限制/);
+    return assertSafeDiagnostic(error, 200, 'req_too_large', 'application/json');
+  });
+  assert.ok(pulls < 150, `JSON reader consumed ${pulls} chunks instead of stopping at the size bound`);
+  assert.equal(cancelled, true);
 });
 
 test('HTTP admission errors never fall through to another endpoint or billing route', async () => {

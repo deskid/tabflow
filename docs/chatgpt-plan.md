@@ -1,8 +1,8 @@
 # ChatGPT 订阅接入原型
 
-此说明适用于 `feat/chatgpt-plan-signin` 分支的 1.2.0 原型。它尝试用用户自己的 ChatGPT 计划完成标签分类，不要求本机 CLI、Node.js、Native Messaging Host 或注册脚本，也不使用开发者提供的 API Key。
+此说明适用于 `feat/chatgpt-plan-signin` 分支的 1.2.1 原型。它尝试用用户自己的 ChatGPT 计划完成标签分类，不要求本机 CLI、Node.js、Native Messaging Host 或注册脚本，也不使用开发者提供的 API Key。
 
-浏览器回调适配尚未获得 OpenAI 的扩展专用确认，真实账号授权与推理尚待验证。本页不表示功能已经发布或已适用于所有账户。既有本机 Codex 模式继续兼容已配置用户。
+浏览器回调适配尚未获得 OpenAI 的扩展专用确认。用户已完成真实账号授权并读取 GPT-6.1-Sol 模型目录；1.2.0 的实际分类因响应格式检查失败，1.2.1 增加客户端格式容错与安全诊断，仍需一次成功的真实分类验收。本页不表示功能已经发布或已适用于所有账户。既有本机 Codex 模式继续兼容已配置用户。
 
 ## 使用与验收
 
@@ -10,7 +10,7 @@
 2. 打开偏好设置，将分类引擎选为「ChatGPT 订阅（实验）」。
 3. 点击 **Continue with ChatGPT**，授予本次登录需要的网站权限，然后在 OpenAI 页面登录并授权自己的计划。保持原 TabFlow 界面打开。
 4. 成功取得计划推理权限后读取当前账户的模型目录；若原模型不在目录，自动选取服务端排序第一项，也可自行选择目录中的模型。
-5. 使用几个公开测试页面进行一次智能分组。只有订阅请求收到 `response.completed`、最终分组 JSON 通过校验，且界面显示使用「ChatGPT 订阅」完成分组，才算真实推理路径成功。
+5. 使用几个公开测试页面进行一次智能分组。只有订阅请求确认完整完成、最终分组 JSON 通过校验，且界面显示使用「ChatGPT 订阅」完成分组，才算真实推理路径成功。正常流式响应必须收到 `response.completed`；客户端也可识别标准完整 Responses JSON 的 `status: completed`，这只是返回格式容错，不代表 SIWC 官方承诺会返回非流式 JSON。
 
 账号已登录、计划 scope 已授予或模型目录可读取，都不能单独证明推理权限与额度可用。若结果提示“已改用域名规则”，本次不算订阅推理成功。记录失败时仅提供安全的 HTTP 状态、错误码、请求编号或脱敏描述，不提供授权码、token 或私人网址。
 
@@ -36,7 +36,9 @@ Access、refresh 与 ID token 仅保存在承载该会话的扩展页面模块�
 
 续期请求按会话串行，使用最新轮换 refresh token。临时网络或服务错误保留凭据并有界退避，不返回过期 access token；确认失效的授权才结束会话。刷新后缺少计划 scope 时保留有效身份、禁止推理。重新登录与退出不会被旧刷新覆盖；退出会等待已开始的续期，再尝试撤销最新可续期会话。
 
-模型目录按官方 `models / slug / visibility` 格式处理。分类请求设置 `store: false`、`stream: true`，不发送预览流程不支持的 temperature、max_output_tokens 或 previous_response_id；只有完成事件中的最终文本可进入分组校验，流中错误、空终帧、EOF 与 `[DONE]` 不能批准此前的增量。
+模型目录按官方 `models / slug / visibility` 格式处理。分类请求设置 `store: false`、`stream: true`，不发送预览流程不支持的 temperature、max_output_tokens 或 previous_response_id；按正文明确的事件流 framing 或完整 Responses JSON 结构识别返回格式，Content-Type 会归一化并保留为诊断。SSE 必须有完成事件；JSON 必须是标准 `object: response / status: completed / output[]` 或明确的 `response.completed` 终事件封装。两条路径共用最终消息校验，非空 error／incomplete_details、未完成状态、拒绝、无效文本均被拒绝；只提取最终 output_text，不从任意文本、裸 groups 或 SDK 便捷字段猜测结果。流中错误、空终帧、EOF 与 `[DONE]` 不能批准此前的增量。
+
+协议失败会附安全的 HTTP 状态、媒体类型、响应形状与已过滤 request ID，不回显响应正文、HTML、detail、提示词或凭据。HTTP 200 中的错误对象依然是失败，不能以状态码 200 代替推理成功。
 
 最终分组验证组名、颜色以及每个输入标签 ID 恰好出现一次；未知、重复或遗漏 ID 都会拒绝。请求失败不会改用 API Key 或其他付费接口。已有的显式域名规则回退仍按真实引擎与错误原因提示，不能标为模型成功。
 

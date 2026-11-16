@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TabFlow - 垂直标签与智能分组",
-  "version": "1.2.0",
-  "version_name": "1.2.0 ChatGPT plan prototype",
+  "version": "1.2.1",
+  "version_name": "1.2.1 ChatGPT plan prototype",
   "minimum_chrome_version": "120",
   "description": "在 Chrome 侧边栏管理标签与分组，整合书签和稍后读，支持本地规则及可选 AI 分类。",
   "icons": {
