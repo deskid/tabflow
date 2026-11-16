@@ -1,6 +1,6 @@
 {
   "name": "tabflow",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Chrome vertical tabs, tab grouping and reading list with optional AI classification",
   "main": "index.js",
   "scripts": {
