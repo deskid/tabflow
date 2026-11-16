@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, CheckCircle2, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
 import { BuiltinModelStatus } from './BuiltinModelStatus';
+import { getNativeInstallCommand } from '../services/nativeCodexSetup';
 import {
   APIAccessRequiredError, getAPIModels, getLocalCodexStatus,
   type AISettings, type CodexAccount, type CodexModel,
@@ -30,21 +31,6 @@ const PROVIDERS: Array<{ id: AISettings['provider']; label: string }> = [
 
 const fieldClass = 'w-full min-w-0 px-2.5 py-2 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[13px] text-[var(--text-high)] outline-none';
 
-const REMOTE_MAC_INSTALLER = 'https://raw.githubusercontent.com/deskid/tabflow/main/scripts/install-native-host.sh';
-
-function getInstallCommand(): string {
-  const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
-  const extId = typeof chrome !== 'undefined' && chrome.runtime?.id ? chrome.runtime.id : '';
-  if (isMac) {
-    return extId && extId !== 'pnjgkehmcfheoecnhenfeidkpkdjifkm'
-      ? `curl -fsSL ${REMOTE_MAC_INSTALLER} | bash -s -- ${extId}`
-      : `curl -fsSL ${REMOTE_MAC_INSTALLER} | bash`;
-  }
-  return extId
-    ? `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-native-host.ps1 -ExtensionId ${extId}`
-    : 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\install-native-host.ps1';
-}
-
 function getCodexGuide(
   error: string,
   errorCodes: string[],
@@ -61,11 +47,14 @@ function getCodexGuide(
       title: '未检测到本机 Codex 桥接',
       detail: isMac
         ? '请先确认本机已登录 codex，打开「终端」运行下方命令后再点击重新检测：'
-        : '请先在当前用户下完成 codex login，并在项目根目录运行下方安装命令：',
-      command: getInstallCommand(),
+        : '请先在当前用户下完成 codex login，再打开 PowerShell 运行下方安装命令：',
+      command: getNativeInstallCommand(
+        typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        typeof chrome !== 'undefined' ? chrome.runtime?.id : undefined,
+      ),
       note: isMac
         ? '脚本将下载桥接文件到 ~/Library/Application Support/TabFlow/，为浏览器注册 Native Messaging Host，并自动检测本机 Codex 状态。'
-        : '脚本将为当前用户生成启动器并注册 Chrome Native Messaging Host，无需管理员权限。',
+        : '脚本将下载桥接文件到 %LOCALAPPDATA%\\TabFlowNativeHost，并为当前用户注册 Chrome Native Messaging Host，无需下载源码或管理员权限。',
     };
   }
   if (errorCodes.includes('CODEX_NOT_FOUND')) {

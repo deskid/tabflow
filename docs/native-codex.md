@@ -8,22 +8,30 @@ TabFlow 通过 Chrome Native Messaging 连接官方 Codex CLI 的 `app-server`�
 
 | 平台 | 当前 TabFlow 配套情况 |
 | --- | --- |
-| Windows | 提供自动安装器，安装器预演与桥接协议有自动化测试 |
-| macOS | 已由开发者实机验证可用；当前未提供自动安装器 |
+| Windows | 提供 PowerShell 在线安装器，安装器预演与桥接协议有自动化测试 |
+| macOS | 提供在线安装器，已由开发者实机验证可用 |
 
-macOS 接入已由开发者在实际环境验证。仓库中的 [Unix 启动脚本](../scripts/native-bridge.sh) 用于启动 Node 桥接，Chrome Native Messaging Host 清单及 Node.js、Codex 路径需单独配置；当前提供的自动安装器为 Windows PowerShell 脚本。
+两个平台都可以在偏好设置复制命令，下载并直接执行安装脚本，再由脚本安装桥接文件、生成启动器并注册 host。无需手动下载源码或解压安装包。Node.js 和官方 Codex CLI 需提前安装。
 
 ## Windows 安装
 
-需要 Node.js 24+、官方 Codex CLI 和完整的 TabFlow 源码目录。本机 host 不包含在扩展 ZIP 内，安装后仍需保留源码目录中的桥接脚本。
+需要 Node.js 24+ 和官方 Codex CLI。本机 host 不包含在扩展 ZIP 内。
 
-先在当前 Windows 用户下完成 `codex login` 或相应提供商配置，再在项目根目录运行：
+先在当前 Windows 用户下完成 `codex login` 或相应提供商配置。在 TabFlow 偏好设置选择「本机 Codex」，复制安装引导中的命令，在 PowerShell 的任意目录运行。命令会下载并直接执行安装器，并使用当前扩展的实际 ID 注册 host，无需下载完整源码或管理员权限。
+
+安装器将 `native-bridge.mjs`、`codex-app-server.mjs`、启动器和 host 清单保存在 `%LOCALAPPDATA%\TabFlowNativeHost`。所需桥接文件会从安装器同目录复制，缺少时从 GitHub 下载；全部下载成功后才替换本机桥接文件。
+
+### 从源码安装
+
+如果已有完整源码，也可以在包含 `scripts` 的项目根目录运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1
 ```
 
-安装器为当前用户生成启动器和 host 清单，并注册 Chrome Native Messaging Host，无需管理员权限。默认根据开发清单中的公钥推导扩展 ID。
+省略 `-ExtensionId` 时，从源码安装会根据开发清单的公钥推导扩展 ID；在线执行或独立下载的安装器默认使用商店扩展 ID `pnjgkehmcfheoecnhenfeidkpkdjifkm`。设置页生成的命令始终携带当前扩展的实际 ID。
+
+若提示 `-File` 指定的脚本不存在，当前目录没有 `scripts\install-native-host.ps1`。使用设置页的独立安装命令，或先切换到完整源码的项目根目录；扩展 ZIP 内没有此脚本。
 
 重新加载扩展，在偏好设置中选择「本机 Codex」并刷新状态和模型列表。未安装 host、未完成认证或模型查询失败时，会显示实际错误；基础功能仍可使用。
 
@@ -50,7 +58,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 | `-InstallDirectory` | 指定生成启动器和 host 清单的目录 |
 | `-WhatIf` | 输出安装计划，核对路径、扩展 ID 和注册内容 |
 
-安装器源码见 [install-native-host.ps1](../scripts/install-native-host.ps1)。安装后若移动或删除桥接源码目录，需要重新安装以更新启动器路径。
+安装器源码见 [install-native-host.ps1](../scripts/install-native-host.ps1)。安装完成后可以移动或删除下载文件及源码目录，启动器使用用户安装目录内的桥接副本。更新桥接时重新运行安装命令。
 
 ## 连接检查
 

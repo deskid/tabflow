@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile, access, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, access, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stripTypeScriptTypes } from 'node:module';
+import { getNativeInstallCommand } from '../src/services/nativeCodexSetup.ts';
 
 const sourceURL = (source) => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`;
 const providerURL = sourceURL(await readFile(new URL('../src/services/providerSettings.ts', import.meta.url), 'utf8'));
@@ -73,9 +74,10 @@ test('default grouping produces local groups without native host, model or API a
 });
 
 const installer = fileURLToPath(new URL('../scripts/install-native-host.ps1', import.meta.url));
+const powershellExecutable = process.env.TABFLOW_TEST_POWERSHELL || (process.platform === 'win32' ? 'powershell.exe' : undefined);
 const psQuote = (value) => `'${value.replaceAll("'", "''")}'`;
 function powershell(source) {
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], {
+  const result = spawnSync(powershellExecutable, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], {
     encoding: 'utf8', windowsHide: true, timeout: 30000,
   });
   assert.ifError(result.error);
@@ -89,7 +91,18 @@ const deriveId = (key) => [...createHash('sha256').update(Buffer.from(key, 'base
   .map((byte) => String.fromCharCode(97 + (byte >> 4), 97 + (byte & 15))).join('');
 const explicitId = 'abcdefghijklmnopabcdefghijklmnop';
 
-test('PowerShell AST helper validates IDs strictly and derives ID from actual public key', { skip: process.platform !== 'win32' }, () => {
+test('Windows setup downloads its installer and binds the current extension without a repository', () => {
+  for (const id of [explicitId, undefined, '']) {
+    const command = getNativeInstallCommand('Windows NT 10.0; Win64; x64', id);
+    assert.ok(command.includes('https://raw.githubusercontent.com/deskid/tabflow/main/scripts/install-native-host.ps1'));
+    assert.ok(command.includes(`-ExtensionId ${id || 'pnjgkehmcfheoecnhenfeidkpkdjifkm'}`));
+    assert.ok(!command.includes('.\\scripts\\'));
+  }
+  assert.equal(getNativeInstallCommand('Macintosh; Intel Mac OS X'), 'curl -fsSL https://raw.githubusercontent.com/deskid/tabflow/main/scripts/install-native-host.sh | bash');
+  assert.ok(getNativeInstallCommand('Macintosh; Intel Mac OS X', explicitId).endsWith(`bash -s -- ${explicitId}`));
+});
+
+test('PowerShell AST helper validates IDs strictly and derives ID from actual public key', { skip: !powershellExecutable }, () => {
   const invalid = ['', 'a'.repeat(31), 'a'.repeat(33), 'A'.repeat(32), 'q'.repeat(32), `${'a'.repeat(32)}\n`, ` ${'a'.repeat(32)}`];
   const result = powershell(`
 $ErrorActionPreference = 'Stop'
@@ -118,17 +131,20 @@ try { $null = Get-TabFlowExtensionId } catch { $missingKeyRejected = $true }
   assert.equal(result.missingKeyRejected, true);
 });
 
-test('Windows PowerShell WhatIf returns complete plans without files, registry changes or CLI execution', { skip: process.platform !== 'win32' }, async () => {
-  const temporary = await mkdtemp(path.join(tmpdir(), 'tabflow-settings-installer-'));
-  // PowerShell expands Windows 8.3 aliases in the installation directory.
-  const canonicalTemporary = await realpath(temporary);
+test('PowerShell WhatIf plans source and standalone installs without downloads, writes or CLI execution', { skip: !powershellExecutable }, async () => {
+  const temporary = await realpath(await mkdtemp(path.join(tmpdir(), 'tabflow-settings-installer-')));
   const dummyCLI = path.join(temporary, 'harmless.js');
   const marker = path.join(temporary, 'cli-executed');
+  const standaloneInstaller = path.join(temporary, 'install-native-host.ps1');
   await writeFile(dummyCLI, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'unexpected execution');\n`);
+  await writeFile(standaloneInstaller, await readFile(installer));
   try {
     const result = powershell(`
 $ErrorActionPreference = 'Stop'
+if (!$env:LOCALAPPDATA) { $env:LOCALAPPDATA = ${psQuote(temporary)} }
+function Invoke-WebRequest { throw 'WhatIf must not download bridge files' }
 function Read-HostRegistry {
+  if ($env:OS -ne 'Windows_NT') { return $null }
   $snapshot = @()
   foreach ($view in @([Microsoft.Win32.RegistryView]::Registry32, [Microsoft.Win32.RegistryView]::Registry64)) {
     $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser, $view)
@@ -145,11 +161,13 @@ function Read-HostRegistry {
 }
 $before = Read-HostRegistry
 $plans = @()
-foreach ($mode in @('explicit', 'derived')) {
+foreach ($mode in @('explicit', 'derived', 'standalone', 'streamed', 'standalone-default', 'streamed-default')) {
   $target = Join-Path ${psQuote(temporary)} $mode
   $arguments = @{ NodePath = ${psQuote(process.execPath)}; CodexPath = ${psQuote(dummyCLI)}; CodexHome = ${psQuote(temporary)}; InstallDirectory = $target; WhatIf = $true }
-  if ($mode -eq 'explicit') { $arguments.ExtensionId = ${psQuote(explicitId)} }
-  $plan = (& ${psQuote(installer)} @arguments 6>$null) | ConvertFrom-Json
+  if ($mode -notin @('derived', 'standalone-default', 'streamed-default')) { $arguments.ExtensionId = ${psQuote(explicitId)} }
+  $scriptPath = if ($mode -like 'streamed*') { [scriptblock]::Create([IO.File]::ReadAllText(${psQuote(installer)})) }
+    elseif ($mode -like 'standalone*') { ${psQuote(standaloneInstaller)} } else { ${psQuote(installer)} }
+  $plan = (& $scriptPath @arguments 6>$null) | ConvertFrom-Json
   $plans += [pscustomobject]@{ mode = $mode; directoryExists = Test-Path -LiteralPath $target; plan = $plan }
 }
 $bindingRejected = @()
@@ -161,7 +179,7 @@ foreach ($invalid in @('', ('A' * 32), ('q' * 32), ('a' * 31), (('a' * 32) + [ch
     assert.equal(result.registryUnchanged, true);
     assert.deepEqual(result.bindingRejected, [true, true, true, true, true]);
     for (const { mode, directoryExists, plan } of result.plans) {
-      const id = mode === 'explicit' ? explicitId : deriveId(manifest.key);
+      const id = mode === 'derived' ? deriveId(manifest.key) : mode.endsWith('-default') ? 'pnjgkehmcfheoecnhenfeidkpkdjifkm' : explicitId;
       assert.equal(directoryExists, false);
       assert.equal(plan.installed, false);
       assert.equal(plan.extensionId, id);
@@ -169,8 +187,10 @@ foreach ($invalid in @('', ('A' * 32), ('q' * 32), ('a' * 31), (('a' * 32) + [ch
       assert.equal(plan.manifestContent.path, plan.launcher);
       assert.equal(plan.node, process.execPath);
       assert.equal(plan.codex, dummyCLI);
-      assert.equal(path.dirname(plan.manifest), path.join(canonicalTemporary, mode));
-      assert.equal(path.dirname(plan.launcher), path.join(canonicalTemporary, mode));
+      assert.equal(path.dirname(plan.manifest), path.join(temporary, mode));
+      assert.equal(path.dirname(plan.launcher), path.join(temporary, mode));
+      assert.equal(plan.bridge, path.join(temporary, mode, 'native-bridge.mjs'));
+      assert.ok(plan.launcherContent.includes(plan.bridge));
       assert.ok(plan.launcherContent.includes(dummyCLI));
       assert.ok(plan.launcherContent.includes(process.execPath));
     }
@@ -179,4 +199,123 @@ foreach ($invalid in @('', ('A' * 32), ('q' * 32), ('a' * 31), (('a' * 32) + [ch
     // This is the unique temporary directory created by this test.
     await rm(temporary, { recursive: true, force: true });
   }
+});
+
+function loadInstallerFunction(name) {
+  return `
+$tokens = $null; $parseErrors = $null
+$ast = [Management.Automation.Language.Parser]::ParseFile(${psQuote(installer)}, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count) { throw 'Installer syntax errors' }
+$helper = $ast.Find({ param($entry) $entry -is [Management.Automation.Language.FunctionDefinitionAst] -and $entry.Name -eq ${psQuote(name)} }, $true)
+if (!$helper) { throw 'Missing installer function' }
+. ([scriptblock]::Create($helper.Extent.Text))
+`;
+}
+
+test('installed bridge runs after the source directory is deleted and can be installed in place', { skip: !powershellExecutable }, async () => {
+  const temporary = await realpath(await mkdtemp(path.join(tmpdir(), 'tabflow native copy ')));
+  const sourceDirectory = path.join(temporary, 'source files');
+  const installDirectory = path.join(temporary, 'installed files');
+  try {
+    await mkdir(sourceDirectory);
+    for (const file of ['native-bridge.mjs', 'codex-app-server.mjs']) {
+      await writeFile(path.join(sourceDirectory, file), await readFile(new URL(`../scripts/${file}`, import.meta.url)));
+    }
+    powershell(`
+$ErrorActionPreference = 'Stop'
+${loadInstallerFunction('Install-TabFlowBridge')}
+function Invoke-WebRequest { throw 'Local installation must not access the network' }
+Install-TabFlowBridge -SourceDirectory ${psQuote(sourceDirectory)} -InstallDirectory ${psQuote(installDirectory)}
+Install-TabFlowBridge -SourceDirectory ${psQuote(installDirectory)} -InstallDirectory ${psQuote(installDirectory)}
+@{ copied = $true } | ConvertTo-Json -Compress
+`);
+    await rm(sourceDirectory, { recursive: true });
+    const body = Buffer.from(JSON.stringify({ action: 'PING' }));
+    const header = Buffer.alloc(4); header.writeUInt32LE(body.length);
+    const result = spawnSync(process.execPath, [path.join(installDirectory, 'native-bridge.mjs')], {
+      cwd: temporary, input: Buffer.concat([header, body]), timeout: 10000, windowsHide: true,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr.toString());
+    assert.ok(result.stdout.length >= 4, 'Installed bridge must reply to PING');
+    assert.equal(result.stdout.readUInt32LE(0), result.stdout.length - 4);
+    const response = JSON.parse(result.stdout.subarray(4));
+    assert.equal(response.success, true);
+    assert.equal(response.type, 'PONG');
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
+
+test('standalone bridge download keeps an existing installation when a dependency fails', { skip: !powershellExecutable }, async () => {
+  const temporary = await mkdtemp(path.join(tmpdir(), 'tabflow native download '));
+  const installDirectory = path.join(temporary, 'installed');
+  try {
+    await mkdir(installDirectory);
+    for (const file of ['native-bridge.mjs', 'codex-app-server.mjs']) await writeFile(path.join(installDirectory, file), 'previous version');
+    const result = powershell(`
+$ErrorActionPreference = 'Stop'
+${loadInstallerFunction('Install-TabFlowBridge')}
+$script:failDownload = $true
+$script:downloads = @()
+$env:TABFLOW_REF = 'test-fixture'
+function Invoke-WebRequest {
+  param([switch]$UseBasicParsing, [string]$Uri, [string]$OutFile)
+  $script:downloads += [pscustomobject]@{ uri = $Uri; path = $OutFile }
+  if ($script:failDownload -and $Uri.EndsWith('/codex-app-server.mjs')) { throw 'Simulated download failure' }
+  [IO.File]::WriteAllText($OutFile, 'downloaded ' + ($Uri.Split('/')[-1]))
+}
+$failed = $false
+try { Install-TabFlowBridge -SourceDirectory '' -InstallDirectory ${psQuote(installDirectory)} } catch { $failed = $true }
+$previousPreserved = @('native-bridge.mjs', 'codex-app-server.mjs' | ForEach-Object {
+  [IO.File]::ReadAllText((Join-Path ${psQuote(installDirectory)} $_)) -eq 'previous version'
+})
+$script:failDownload = $false
+Install-TabFlowBridge -SourceDirectory ${psQuote(temporary)} -InstallDirectory ${psQuote(installDirectory)}
+@{ failed = $failed; previousPreserved = $previousPreserved; downloads = $script:downloads;
+  stagingRemoved = @($script:downloads | ForEach-Object { !(Test-Path -LiteralPath (Split-Path $_.path -Parent)) }) } | ConvertTo-Json -Depth 4 -Compress
+`);
+    assert.equal(result.failed, true);
+    assert.deepEqual(result.previousPreserved, [true, true]);
+    assert.deepEqual(result.stagingRemoved, [true, true, true, true]);
+    assert.deepEqual(result.downloads.map(({ uri }) => uri), [0, 1, 0, 1].map((index) => `https://raw.githubusercontent.com/deskid/tabflow/test-fixture/scripts/${index ? 'codex-app-server.mjs' : 'native-bridge.mjs'}`));
+    for (const file of ['native-bridge.mjs', 'codex-app-server.mjs']) assert.equal(await readFile(path.join(installDirectory, file), 'utf8'), `downloaded ${file}`);
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
+
+test('copied Windows command runs the downloaded installer without a local script and surfaces failures', { skip: !powershellExecutable }, async () => {
+  const temporary = await mkdtemp(path.join(tmpdir(), 'tabflow bootstrap '));
+  const marker = path.join(temporary, 'installed-id');
+  try {
+    const result = powershell(`
+$ErrorActionPreference = 'Stop'
+$script:downloads = 0
+$script:failDownload = $false
+$script:installerContent = ${psQuote(`param([string]$ExtensionId)\n[IO.File]::WriteAllText(${psQuote(marker)}, $ExtensionId)`)}
+function Invoke-WebRequest {
+  [CmdletBinding()]
+  param([switch]$UseBasicParsing, [string]$Uri)
+  if ($Uri -ne 'https://raw.githubusercontent.com/deskid/tabflow/main/scripts/install-native-host.ps1') { throw 'Wrong installer URL' }
+  $script:downloads++
+  if ($script:failDownload) { throw 'Simulated download failure' }
+  [pscustomobject]@{ Content = $script:installerContent }
+}
+Push-Location ${psQuote(temporary)}
+try {
+  ${getNativeInstallCommand('Windows NT 10.0', explicitId)}
+  $script:installerContent = "throw 'Simulated installer failure'"
+  $failed = $false
+  try { ${getNativeInstallCommand('Windows NT 10.0', explicitId)} } catch { $failed = $true }
+  $script:failDownload = $true
+  $downloadFailed = $false
+  try { ${getNativeInstallCommand('Windows NT 10.0', explicitId)} } catch { $downloadFailed = $true }
+} finally { Pop-Location }
+@{ failed = $failed; downloadFailed = $downloadFailed; downloads = $script:downloads;
+  installedId = [IO.File]::ReadAllText(${psQuote(marker)});
+  files = @(Get-ChildItem -LiteralPath ${psQuote(temporary)} | ForEach-Object { $_.Name }) } | ConvertTo-Json -Compress
+`);
+    assert.equal(result.installedId, explicitId);
+    assert.equal(result.failed, true);
+    assert.equal(result.downloadFailed, true);
+    assert.equal(result.downloads, 3);
+    assert.deepEqual(result.files, ['installed-id']);
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 });

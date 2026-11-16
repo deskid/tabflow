@@ -57,7 +57,9 @@
 
 基础管理不依赖此路径。官方 Codex CLI 及 Native Messaging Host 需要独立安装，不包含在扩展 ZIP 内。先安装 Node.js、官方 Codex CLI，并在当前 Windows 用户下完成 `codex login` 或所需提供商配置。
 
-在 `chrome://extensions/` 开启开发者模式并复制目标 TabFlow 的 ID，再在完整项目根目录运行：
+商店用户可以在偏好设置选择「本机 Codex」，复制安装命令，在 PowerShell 的任意目录运行。命令会下载并直接执行安装器，再将桥接脚本安装到 `%LOCALAPPDATA%\TabFlowNativeHost`，无需完整源码或解压安装包。检查命令中的 `-ExtensionId` 与 `chrome://extensions/` 中目标 TabFlow 的 ID 一致。
+
+已有完整源码时，也可以在项目根目录预演并安装：
 
 ```powershell
 $extensionId = Read-Host '粘贴 chrome://extensions/ 中目标 TabFlow 的 ID'
@@ -65,7 +67,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-host.ps1 -ExtensionId $extensionId
 ```
 
-预演需要有效 Node.js、Codex CLI 及可选 CodexHome 路径，不写文件或注册表。实际安装为当前用户注册 `com.tabflow.codex_bridge`。不同构建或安装方式可能有不同 ID；检查生成的 host 清单 `allowed_origins` 是否允许目标 `chrome-extension://<扩展ID>/`。省略 `-ExtensionId` 时按开发清单公钥推导 ID。安装器每次注册一个允许来源，重新绑定会替换旧 ID。
+预演需要有效 Node.js、Codex CLI 及可选 CodexHome 路径，不下载桥接文件，也不写文件或注册表。实际安装为当前用户注册 `com.tabflow.codex_bridge`。不同构建或安装方式可能有不同 ID；检查生成的 host 清单 `allowed_origins` 是否允许目标 `chrome-extension://<扩展ID>/`。从源码安装且省略 `-ExtensionId` 时按开发清单公钥推导 ID；在线执行或独立下载时默认绑定商店 ID。安装器每次注册一个允许来源，重新绑定会替换旧 ID。安装后移走源码或下载文件，再次检查桥接应仍可连接。
 
 重新加载扩展，在偏好设置选择「本机 Codex」并刷新。预期显示真实认证状态、模型目录或可解释错误；未安装 host 时显示未连接，基础管理和本地规则仍可用。模型目录不保证每个模型都有调用额度。使用公开页面测试分类；模型由 CLI 当前配置决定，可能在云端推理。扩展不接收 CLI 登录令牌或账号邮箱。
 
