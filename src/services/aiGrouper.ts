@@ -115,8 +115,10 @@ export async function getLocalCodexModels(): Promise<CodexModelsResult> {
 export interface CodexStatusResult {
   account?: CodexAccount;
   accountError?: string;
+  accountErrorCode?: string;
   models: CodexModel[];
   modelsError?: string;
+  modelsErrorCode?: string;
   error?: string;
 }
 
@@ -138,10 +140,14 @@ export async function getLocalCodexStatus(): Promise<CodexStatusResult> {
       accountError: typeof response.accountError === 'string' && response.accountError
         ? `${response.accountError}${Number.isInteger(response.accountRpcCode) ? `（RPC ${response.accountRpcCode}）` : ''}`
         : validAccount ? undefined : '账号状态读取失败，点击刷新重试。',
+      ...(typeof response.accountErrorCode === 'string' && response.accountErrorCode
+        ? { accountErrorCode: response.accountErrorCode } : {}),
       models: validModels ? response.models.map((item: CodexModel) => ({ id: item.id, name: item.name, isDefault: item.isDefault === true })) : [],
       modelsError: typeof response.modelsError === 'string' && response.modelsError
         ? `${response.modelsError}${Number.isInteger(response.modelsRpcCode) ? `（RPC ${response.modelsRpcCode}）` : ''}`
         : validModels ? undefined : 'Codex 返回的模型列表格式无效。',
+      ...(typeof response.modelsErrorCode === 'string' && response.modelsErrorCode
+        ? { modelsErrorCode: response.modelsErrorCode } : {}),
     };
   } catch (cause) {
     return { models: [], error: cause instanceof Error ? cause.message : '本机 Codex 状态读取失败。' };

@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# macOS Chrome Native Messaging Host 一键安装脚本
+# macOS Chromium Native Messaging Host 一键安装脚本
 # 默认绑定已发布到 Chrome Web Store 的 TabFlow 扩展 ID，可通过参数或 EXTENSION_ID 环境变量覆盖
 EXTENSION_ID="${1:-${EXTENSION_ID:-pnjgkehmcfheoecnhenfeidkpkdjifkm}}"
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-BRIDGE_SH="$SCRIPT_DIR/native-bridge.sh"
-
-if [ ! -f "$BRIDGE_SH" ]; then
-  echo "❌ 未找到桥接脚本: $BRIDGE_SH" >&2
-  exit 1
-fi
+BRIDGE_JS="$SCRIPT_DIR/native-bridge.mjs"
+SERVER_JS="$SCRIPT_DIR/codex-app-server.mjs"
+RAW_BASE="https://raw.githubusercontent.com/deskid/tabflow/${TABFLOW_REF:-main}/scripts"
 
 NODE_BIN="${TABFLOW_NODE:-$(command -v node || true)}"
 CODEX_BIN="${TABFLOW_CODEX_EXECUTABLE:-$(command -v codex || true)}"
@@ -23,25 +20,35 @@ NODE_BIN="$("$NODE_BIN" -e 'console.log(require("node:fs").realpathSync(process.
 CODEX_BIN="$("$NODE_BIN" -e 'console.log(require("node:fs").realpathSync(process.argv[1]))' "$CODEX_BIN")"
 
 SUPPORT_DIR="$HOME/Library/Application Support/TabFlow"
-HOST_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
 LAUNCHER="$SUPPORT_DIR/run-codex-bridge.sh"
-MANIFEST="$HOST_DIR/com.tabflow.codex_bridge.json"
 
-mkdir -p "$SUPPORT_DIR" "$HOST_DIR"
+mkdir -p "$SUPPORT_DIR"
+
+# 优先使用同目录源码；若通过 curl | bash 独立安装，则从 GitHub 拉取桥接脚本
+if [ -f "$BRIDGE_JS" ] && [ -f "$SERVER_JS" ]; then
+  cp "$BRIDGE_JS" "$SUPPORT_DIR/native-bridge.mjs"
+  cp "$SERVER_JS" "$SUPPORT_DIR/codex-app-server.mjs"
+else
+  echo "⬇️ 正在下载 TabFlow Codex 桥接脚本..."
+  curl -fsSL "$RAW_BASE/native-bridge.mjs" -o "$SUPPORT_DIR/native-bridge.mjs"
+  curl -fsSL "$RAW_BASE/codex-app-server.mjs" -o "$SUPPORT_DIR/codex-app-server.mjs"
+fi
 
 {
   echo '#!/bin/sh'
   echo 'set -eu'
-  echo "export TABFLOW_NODE=\"$NODE_BIN\""
   echo "export TABFLOW_CODEX_EXECUTABLE=\"$CODEX_BIN\""
   if [ -n "${CODEX_HOME:-}" ]; then
     echo "export CODEX_HOME=\"$CODEX_HOME\""
   fi
-  echo "exec \"$BRIDGE_SH\""
+  echo "exec \"$NODE_BIN\" \"$SUPPORT_DIR/native-bridge.mjs\""
 } > "$LAUNCHER"
 chmod +x "$LAUNCHER"
 
-cat > "$MANIFEST" <<EOF
+write_manifest() {
+  local host_dir="$1"
+  mkdir -p "$host_dir"
+  cat > "$host_dir/com.tabflow.codex_bridge.json" <<EOF
 {
   "name": "com.tabflow.codex_bridge",
   "description": "TabFlow official Codex app-server stdio bridge",
@@ -52,9 +59,25 @@ cat > "$MANIFEST" <<EOF
   ]
 }
 EOF
+  echo "✅ 已注册 Host: $host_dir/com.tabflow.codex_bridge.json"
+}
 
-echo "✅ 已生成启动器: $LAUNCHER"
-echo "✅ 已注册 Chrome Host: $MANIFEST"
+APP_SUPPORT="$HOME/Library/Application Support"
+# 默认始终为 Google Chrome 写入；其他 Chromium 系浏览器若本地存在配置目录则一并注册
+write_manifest "$APP_SUPPORT/Google/Chrome/NativeMessagingHosts"
+for browser_base in \
+  "$APP_SUPPORT/Google/Chrome Canary" \
+  "$APP_SUPPORT/Chromium" \
+  "$APP_SUPPORT/Arc/User Data" \
+  "$APP_SUPPORT/Microsoft Edge" \
+  "$APP_SUPPORT/BraveSoftware/Brave-Browser"
+do
+  if [ -d "$browser_base" ]; then
+    write_manifest "$browser_base/NativeMessagingHosts"
+  fi
+done
+
+echo "✅ 已安装独立启动器: $LAUNCHER"
 echo "🔍 正在自检 Native Host 连接..."
 
 "$NODE_BIN" -e '
