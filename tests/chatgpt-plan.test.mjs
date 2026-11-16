@@ -361,7 +361,7 @@ test('the dispatcher routes the new provider through the subscription channel, n
   const dispatcherSource = await readFile(new URL('../src/services/aiGrouper.ts', import.meta.url), 'utf8');
   const builtin = toURL('export function classifyWithBuiltinModel(){throw Error("Unexpected builtin")} export function getBuiltinModelState(){return {}}');
   const dispatch = await import(toURL(stripTypeScriptTypes(dispatcherSource)
-    .replace("'./builtinModel'", JSON.stringify(builtin)).replace("'./chatgptPlan'", JSON.stringify(moduleURL))));
+    .replace("'./builtinModel'", JSON.stringify(builtin)).replace("'./chatgptPlanClient'", JSON.stringify(moduleURL))));
   globalThis.chrome.runtime = { sendNativeMessage() { throw new Error('Native host must not be called'); } };
   globalThis.fetch = async () => responseStream(completed());
   assert.deepEqual(await dispatch.planGroupByAI(tabs, { provider: 'chatgpt_plan', model: 'account-model-selected' }), groups);

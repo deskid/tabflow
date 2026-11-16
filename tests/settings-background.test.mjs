@@ -9,8 +9,10 @@ const storeSource = (await readFile(new URL('../src/services/settingsStore.ts', 
   .replace("'./providerSettings'", JSON.stringify(providerURL));
 const storeURL = urlFor(storeSource);
 const store = await import(storeURL);
+const sessionHostURL = urlFor('export function registerChatGPTSessionBackground() {}');
 const backgroundSource = (await readFile(new URL('../src/background/index.ts', import.meta.url), 'utf8'))
-  .replace("'../services/settingsStore'", JSON.stringify(storeURL));
+  .replace("'../services/settingsStore'", JSON.stringify(storeURL))
+  .replace("'./chatgptSessionBackground'", JSON.stringify(sessionHostURL));
 const reactURL = urlFor(`
 export const useState = (...args) => globalThis.__settingsHookRunner.useState(...args);
 export const useEffect = (...args) => globalThis.__settingsHookRunner.useEffect(...args);

@@ -11,6 +11,7 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  worker: { format: 'es' },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -20,6 +21,7 @@ export default defineConfig({
         popup: resolve(rootDir, 'popup.html'),
         options: resolve(rootDir, 'options.html'),
         oauth: resolve(rootDir, 'oauth-callback.html'),
+        session: resolve(rootDir, 'chatgpt-session.html'),
         background: resolve(rootDir, 'src/background/index.ts'),
       },
       output: {

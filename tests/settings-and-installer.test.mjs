@@ -17,8 +17,9 @@ const builtinURL = sourceURL(`
 export function classifyWithBuiltinModel() { throw new Error('Built-in model must not run'); }
 export function getBuiltinModelState() { throw new Error('Built-in model must not run'); }
 `);
+const planClientURL = sourceURL('export function planGroupByChatGPTPlan(){throw Error("Unexpected subscription call")}');
 const grouper = await import(sourceURL((await readFile(new URL('../src/services/aiGrouper.ts', import.meta.url), 'utf8'))
-  .replace("'./builtinModel'", JSON.stringify(builtinURL))));
+  .replace("'./builtinModel'", JSON.stringify(builtinURL)).replace("'./chatgptPlanClient'", JSON.stringify(planClientURL))));
 
 test('fresh and partial settings select local heuristic without altering general preferences', () => {
   assert.equal(store.DEFAULT_SETTINGS.aiSettings.provider, 'heuristic');

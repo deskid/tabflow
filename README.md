@@ -97,7 +97,7 @@ pnpm build
 
 ### ChatGPT 订阅（实验）
 
-选择后点击 **Continue with ChatGPT**，通过官方授权使用自己的订阅，无需本机 CLI 或桥接脚本。登录、模型目录和实际分类已通过用户实测；关闭当前 TabFlow 页面后需要重新登录。测试流程与实现边界见 [订阅接入原型说明](docs/chatgpt-plan.md)。
+选择后点击 **Continue with ChatGPT**，通过官方授权使用自己的订阅，无需本机 CLI 或桥接脚本。连接后在账户和模型两行中管理；关闭设置或侧栏仍保持连接，可在账户菜单切换或退出。测试流程与实现边界见 [订阅接入原型说明](docs/chatgpt-plan.md)。
 
 ### 本机 Codex
 
@@ -125,6 +125,7 @@ pnpm build
 | `pnpm test` | 运行回归测试 |
 | `pnpm typecheck` | 执行 TypeScript 检查 |
 | `pnpm test:browser` | 构建后在隔离 Chrome 检查订阅界面与模拟授权回调，不使用真实账号 |
+| `pnpm test:session` | 检查关闭界面、后台休眠后复用登录与分类，凭据不写入浏览器存储 |
 | `pnpm check` | 依次执行类型检查、测试和生产构建 |
 | `pnpm package:store` | 构建并生成商店上传 ZIP |
 | `pnpm audit` | 检查依赖中的已知漏洞 |
