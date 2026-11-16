@@ -1,8 +1,8 @@
 # ChatGPT 订阅接入原型
 
-此说明适用于 `feat/chatgpt-plan-signin` 分支的 1.2.1 原型。它尝试用用户自己的 ChatGPT 计划完成标签分类，不要求本机 CLI、Node.js、Native Messaging Host 或注册脚本，也不使用开发者提供的 API Key。
+此说明适用于 TabFlow 1.2.1 的实验订阅接入。它通过用户自己的 ChatGPT 计划完成标签分类，不要求本机 CLI、Node.js、Native Messaging Host 或注册脚本，也不使用开发者提供的 API Key。
 
-浏览器回调适配尚未获得 OpenAI 的扩展专用确认。用户已完成真实账号授权并读取 GPT-6.1-Sol 模型目录；1.2.0 的实际分类因响应格式检查失败，1.2.1 增加客户端格式容错与安全诊断，仍需一次成功的真实分类验收。本页不表示功能已经发布或已适用于所有账户。既有本机 Codex 模式继续兼容已配置用户。
+2026-11-16，用户已确认 1.2.1 的真实账号登录、GPT-6.1-Sol 模型目录与订阅分类成功。该路径保留实验标记：浏览器回调尚无 OpenAI 的扩展专用确认，实际权限与用量仍由账号／工作区政策决定。未记录该次请求的原始响应，不能由测试成功推断服务器具体返回了哪一种格式。既有本机 Codex 模式继续兼容已配置用户。
 
 ## 使用与验收
 
@@ -57,6 +57,6 @@ pnpm package:store
 
 `pnpm test` 使用模拟 Chrome、OAuth 签名数据与模型响应，不使用真实账号或模型额度。`pnpm test:browser` 要求安装支持扩展调试的现代 Chrome；可用 `TABFLOW_CHROME_BIN` 指定浏览器可执行文件。它在独立临时配置中加载构建副本，授予测试 fixture 的固定主机权限，检查 UI 与模拟授权页面回跳，不操作日常浏览器配置，也不向 OpenAI 提交授权或推理。
 
-该浏览器测试不能代替真实权限弹窗、OpenAI 资格检查、真实登录／续期及一次实际分类。现阶段验证完成前不合并到正式发布分支，不修改 Google 后台，也不覆盖 1.1.0 原始送审归档。
+模拟浏览器测试不等于真实端点验收；当前已有用户真实登录、模型目录与一次分类成功的确认，长时间运行后的实际续期尚未单独验收。仅更新源码与构建产物，不修改 Google 后台，也不覆盖 1.1.0 原始送审归档。
 
 参考：[官方模型与推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference.md)、[令牌保存与会话](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions.md)、[预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations.md)。
