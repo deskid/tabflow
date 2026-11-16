@@ -90,6 +90,8 @@ globalThis.fetch = async (input, init={}) => {
   await writeFile(path.join(directory, 'mock-authorization.html'), '<!doctype html><html><body>Fixture authorization<script type="module" src="mock-authorization.js"></script></body></html>');
   await writeFile(path.join(directory, 'mock-authorization.js'), `
 const query=new URLSearchParams(location.search);
+const saved=(await chrome.storage.local.get('tabflow.chatgptPlan.registrations.v1'))['tabflow.chatgptPlan.registrations.v1'];
+if(Array.isArray(saved)&&saved.length&&(query.get('client_id')!==saved.at(-1).clientId||query.has('agent_name_hint')))throw Error('Returning sign-in must reuse the saved client registration');
 const tab=await chrome.tabs.getCurrent();
 const rules=await chrome.declarativeNetRequest.getSessionRules();
 if(!rules.some(rule=>rule.condition.tabIds?.includes(tab.id)&&rule.condition.regexFilter?.includes('1455/auth/callback')))throw Error('Production callback interception missing; never contact loopback');
@@ -166,8 +168,18 @@ async function testSession(cdp, extensionId) {
   const loggedOut = await callSession(view.evaluate, 'initialize');
   assert.equal(loggedOut.loggedIn, false);
   assert.equal(probeCounts.get('/api/accounts/oauth/revoke'), 1);
+  await waitFor(() => view.evaluate('document.body.innerText.includes("Continue with ChatGPT")'), 'sign-in CTA after explicit logout');
+  await view.evaluate(`([...document.querySelectorAll('button')].find(button=>button.textContent.includes('Continue with ChatGPT'))).click()`);
+  await waitFor(() => view.evaluate(`document.body.innerText.includes(${JSON.stringify(EMAIL)}) && [...document.querySelectorAll('select option')].some(option=>option.value===${JSON.stringify(MODEL)})`), 'returning sign-in using the same registration', 25_000);
+  const returning = await callSession(view.evaluate, 'initialize');
+  assert.equal(returning.account.id, initialStatus.account.id);
+  const savedAccounts = await callSession(view.evaluate, 'accounts');
+  assert.equal(savedAccounts.length, 1, 'Continue must not register another client for a saved account.');
+  assert.equal(probeCounts.get('/api/accounts/oauth/token'), 2, 'Only explicit reconnect performs the second authorization-code exchange.');
+  await callSession(view.evaluate, 'signOut');
+  assert.equal(probeCounts.get('/api/accounts/oauth/revoke'), 2);
   await view.evaluate(`chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[${AUTH_RULE}]})`);
-  return { initialLogin: true, uiReopenRetainsSession: true, serviceWorkerRestartRetainsSession: true, inferenceBeforeAndAfter: true, browserStorageContainsCredentials: false, remoteRevocation: true, workerRequests: Object.fromEntries(probeCounts) };
+  return { initialLogin: true, uiReopenRetainsSession: true, serviceWorkerRestartRetainsSession: true, inferenceBeforeAndAfter: true, browserStorageContainsCredentials: false, remoteRevocation: true, returningSignInReusesRegistration: true, workerRequests: Object.fromEntries(probeCounts) };
 }
 
 let chrome, cdp, exited;

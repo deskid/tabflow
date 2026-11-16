@@ -73,10 +73,10 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
   useEffect(() => {
     mounted.current = true;
     let disposed = false;
-    const refreshSession = () => {
+    const refreshSession = async () => {
       setSession(getChatGPTPlanStatus());
       const id = ++accountRequest.current;
-      void getChatGPTPlanAccounts().then((result) => {
+      await getChatGPTPlanAccounts().then((result) => {
         if (mounted.current && id === accountRequest.current) setAccounts(result);
       }).catch((cause: unknown) => {
         if (mounted.current && id === accountRequest.current) {
@@ -84,10 +84,10 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
         }
       });
     };
-    const unsubscribe = subscribeChatGPTPlanSession(refreshSession);
+    const unsubscribe = subscribeChatGPTPlanSession(() => { void refreshSession(); });
     void initializeChatGPTPlanSession().then(() => {
       if (disposed) return;
-      refreshSession();
+      return refreshSession();
     }).catch((cause: unknown) => {
       if (!disposed) setError(cause instanceof Error ? cause.message : '读取 ChatGPT 会话失败');
     }).finally(() => {
@@ -201,7 +201,7 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
               className="shrink-0 text-[12px] text-[var(--accent-text)]">重新授权</button>}
           </>
         ) : (
-          <button type="button" disabled={!!pending} onClick={() => { void signIn(); }}
+          <button type="button" disabled={!!pending} onClick={() => { void signIn(accounts.at(-1)?.id); }}
             className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--accent-text)] px-3 py-2 text-[13px] text-[var(--app-bg)] disabled:opacity-50">
             {pending === 'signin' && <LoaderCircle size={15} className="animate-spin" />}
             Continue with ChatGPT
