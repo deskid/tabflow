@@ -53,6 +53,17 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   if (message.event === 'ready') {
     void withTimeout(ready, 10_000).then(() => sendResponse({ ok: true, value: true }), error => sendResponse({ ok: false, error: safeError(error) })); return true;
   }
+  if (message.event === 'groupBuiltin' && Array.isArray(message.tabs) && typeof message.customPrompt === 'string') {
+    const { tabs, customPrompt } = message;
+    void (async () => {
+      const builtin = await import('../services/builtinModel');
+      const state = await builtin.checkBuiltinModel();
+      // Automatic grouping may use an installed model, but cannot initiate a download.
+      if (state.status !== 'downloaded') throw new Error('内置模型尚不可用于自动归组，请先在设置中准备模型。');
+      return builtin.classifyWithBuiltinModel(tabs, customPrompt);
+    })().then(value => sendResponse({ ok: true, value }), error => sendResponse({ ok: false, error: safeError(error) }));
+    return true;
+  }
   if (!isSessionRequest(message)) { sendResponse({ ok: false, error: { name: 'SecurityError', message: '无效的会话命令。' } }); return; }
   void withTimeout(ready, 10_000).then(() => request(message.command, message.args)).then(sendResponse, error => sendResponse({ ok: false, error: safeError(error) }));
   return true;

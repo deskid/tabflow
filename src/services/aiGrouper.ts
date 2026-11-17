@@ -346,7 +346,7 @@ export function planGroupBySmartHeuristic(tabs: TabData[]): ProposedGroup[] {
 }
 
 // 3. AI Grouping Main Dispatcher
-export async function planGroupByAI(tabs: TabData[], settings?: AISettings): Promise<ProposedGroup[]> {
+export async function planGroupByAI(tabs: TabData[], settings?: AISettings, options: { requestPermission?: boolean } = {}): Promise<ProposedGroup[]> {
   const provider = settings?.provider || 'codex_native';
   const customPrompt = settings?.customPrompt;
   const model = settings?.model;
@@ -368,7 +368,7 @@ export async function planGroupByAI(tabs: TabData[], settings?: AISettings): Pro
 
   // 3. Cloud LLM
   if (provider === 'openai' || provider === 'deepseek' || provider === 'custom') {
-    return callCloudLLM(tabs, { ...settings, provider });
+    return callCloudLLM(tabs, { ...settings, provider }, options.requestPermission !== false);
   }
 
   // Fallback: Smart Heuristic
@@ -423,7 +423,7 @@ export class APIAccessRequiredError extends Error {
 }
 
 async function authorizeAPIEndpoint(endpoint: string, requestPermission = true): Promise<void> {
-  if (!chrome.permissions?.request) throw new Error('扩展权限接口不可用，请重新加载 TabFlow。');
+  if (!chrome.permissions) throw new Error('扩展权限接口不可用，请重新加载 TabFlow。');
   const url = new URL(endpoint);
   const origins = [`${url.protocol}//${url.hostname}/*`];
   if (!requestPermission) {
@@ -477,12 +477,12 @@ export async function testAPIConnection(settings: AISettings): Promise<{ modelCo
   return { modelCount: (await getAPIModels(settings)).length };
 }
 
-async function callCloudLLM(tabs: TabData[], settings: AISettings): Promise<ProposedGroup[]> {
+async function callCloudLLM(tabs: TabData[], settings: AISettings, requestPermission = true): Promise<ProposedGroup[]> {
   const endpoint = resolveAPIEndpoint(settings);
   const model = settings.model?.trim() || (settings.provider === 'deepseek' ? 'deepseek-chat' : settings.provider === 'openai' ? 'gpt-4o-mini' : '');
   if (!model) throw new Error('请填写自定义接口的模型名称。');
   if (settings.provider !== 'custom' && !settings.apiKey?.trim()) throw new Error('请填写 API Key。');
-  await authorizeAPIEndpoint(endpoint);
+  await authorizeAPIEndpoint(endpoint, requestPermission);
 
   const instruction = settings.customPrompt || DEFAULT_GROUPING_PROMPT;
   const systemMessage = `${instruction}

@@ -25,7 +25,8 @@ async function load(name, environment) {
   const key = `__chatgptSessionTest${sequence++}`;
   globalThis[key] = environment;
   const prefix = `const { chrome, Worker } = globalThis[${JSON.stringify(key)}];\n`;
-  const code = source(name).replace("new URL('./chatgpt-session.worker.ts', import.meta.url)", "'session-worker.js'");
+  const code = source(name).replace("new URL('./chatgpt-session.worker.ts', import.meta.url)", "'session-worker.js'")
+    .replace("import('../services/builtinModel')", `Promise.resolve(globalThis[${JSON.stringify(key)}].builtin)`);
   return import(dataURL(prefix + code + `\n// ${key}`));
 }
 function chromeBase() {
@@ -206,6 +207,30 @@ test('offscreen keeps dedicated worker alive when UI closes, rejects UI host com
   assert.equal(worker.terminated, false);
   assert.equal(worker.messages.some(message => message.type === 'pagehide' || message.command === 'signOut'), false);
   const forged = { ...callback, sender: uiSender, disconnect() { this.rejected = true; } }; chrome.runtime.onConnect.emit(forged); assert.equal(forged.rejected, true);
+});
+
+test('offscreen automatic builtin grouping rejects UI senders and never downloads an unavailable model', async () => {
+  const chrome = chromeBase();
+  let status = 'downloaded';
+  const calls = [];
+  const tabs = [{ id: 1, title: 'Title', url: 'https://example.test', groupId: -1 }];
+  const groups = [{ name: 'Topic', color: 'blue', tabIds: [1] }];
+  class FakeWorker { addEventListener() {} postMessage() {} }
+  const builtin = {
+    async checkBuiltinModel() { calls.push('check'); return { status }; },
+    async classifyWithBuiltinModel(...args) { calls.push(args); return groups; },
+  };
+  await load('host', { chrome, Worker: FakeWorker, builtin });
+  const message = { channel: protocol.SESSION_CHANNEL, target: 'host', event: 'groupBuiltin', tabs, customPrompt: 'Preference' };
+  assert.equal((await dispatch(chrome, message, uiSender)).error.name, 'SecurityError');
+  assert.deepEqual(calls, []);
+  assert.deepEqual((await dispatch(chrome, message, bgSender)).value, groups);
+  assert.deepEqual(calls, ['check', [tabs, 'Preference']]);
+  for (status of ['downloadable', 'unsupported', 'unavailable']) {
+    calls.length = 0;
+    assert.equal((await dispatch(chrome, message, bgSender)).ok, false);
+    assert.deepEqual(calls, ['check'], 'Unavailable models must not enter create/download/classification');
+  }
 });
 
 test('offscreen reports worker bootstrap failure and protocol requests have a bounded timeout', async () => {

@@ -158,6 +158,23 @@ async function testSession(cdp, extensionId) {
   assert.equal(contextsAfter[0].documentId, contextsBefore[0].documentId, 'UI/SW restart must reuse the same session host.');
   assert.equal(probeCounts.get('/api/accounts/oauth/token'), 1, 'Reopening UI must not run OAuth again.');
   assert.equal(probeCounts.get('/v1/responses'), 2, 'Both model calls must complete using the retained session.');
+  // A real completed navigation must use that same selected subscription model
+  // through the background-owned session, without needing a UI-originated RPC.
+  await view.evaluate(`chrome.runtime.sendMessage({action:'UPDATE_AI_SETTINGS',patch:{provider:'chatgpt_plan',model:${JSON.stringify(MODEL)}}})`);
+  const autoTab = await view.evaluate(`chrome.tabs.create({url:'about:blank#automatic-subscription-grouping',active:false})`);
+  const autoTarget = await waitFor(async () => (await cdp.send('Target.getTargets')).targetInfos.find(target => target.url === 'about:blank#automatic-subscription-grouping'), 'automatic grouping target');
+  const { sessionId: autoSession } = await cdp.send('Target.attachToTarget', { targetId: autoTarget.targetId, flatten: true });
+  cdp.on('Fetch.requestPaused', async (request, session) => {
+    if (session !== autoSession) return;
+    await cdp.send('Fetch.fulfillRequest', { requestId: request.requestId, responseCode: 200,
+      responseHeaders: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }],
+      body: Buffer.from('<!doctype html><title>评论实验问题梳理 - 飞书云文档</title><link rel="icon" href="data:,">').toString('base64') }, autoSession);
+  });
+  await cdp.send('Fetch.enable', { patterns: [{ urlPattern: 'https://*', requestStage: 'Request' }] }, autoSession);
+  await cdp.send('Page.navigate', { url: 'https://bytedance.larkoffice.com/wiki/automatic-subscription-grouping' }, autoSession);
+  await waitFor(() => view.evaluate(`(async()=>{const tab=await chrome.tabs.get(${autoTab.id});return tab.groupId>=0&&(await chrome.tabGroups.get(tab.groupId)).title==='测试资料';})()`), 'selected subscription model automatic assignment');
+  assert.equal(probeCounts.get('/v1/responses'), 3, 'Automatic grouping must invoke the subscription model, rather than the document-domain rules.');
+  await view.evaluate(`chrome.tabs.remove(${autoTab.id})`);
   const storage = await view.evaluate('(async()=>({local:await chrome.storage.local.get(null),sync:await chrome.storage.sync.get(null),session:await chrome.storage.session.get(null)}))()');
   const encoded = JSON.stringify(storage);
   assert(!encoded.includes('SESSION_FIXTURE_ACCESS_ONLY') && !encoded.includes('SESSION_FIXTURE_REFRESH_ONLY') && !encoded.includes('id_token'), 'Credentials must never enter browser storage.');
@@ -179,7 +196,7 @@ async function testSession(cdp, extensionId) {
   await callSession(view.evaluate, 'signOut');
   assert.equal(probeCounts.get('/api/accounts/oauth/revoke'), 2);
   await view.evaluate(`chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[${AUTH_RULE}]})`);
-  return { initialLogin: true, uiReopenRetainsSession: true, serviceWorkerRestartRetainsSession: true, inferenceBeforeAndAfter: true, browserStorageContainsCredentials: false, remoteRevocation: true, returningSignInReusesRegistration: true, workerRequests: Object.fromEntries(probeCounts) };
+  return { initialLogin: true, uiReopenRetainsSession: true, serviceWorkerRestartRetainsSession: true, inferenceBeforeAndAfter: true, automaticGroupingUsesSelectedModel: true, browserStorageContainsCredentials: false, remoteRevocation: true, returningSignInReusesRegistration: true, workerRequests: Object.fromEntries(probeCounts) };
 }
 
 let chrome, cdp, exited;

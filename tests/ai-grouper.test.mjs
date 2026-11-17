@@ -82,6 +82,23 @@ function mockCloud(granted, fetcher) {
 }
 const customSettings = { provider: 'custom', apiEndpoint: 'http://127.0.0.1:3425/v1', model: 'local-model' };
 
+test('background classification uses existing API grants without opening a permission prompt', async () => {
+  let networkCalls = 0;
+  globalThis.chrome = { permissions: {
+    contains: async () => true,
+    request: () => assert.fail('Background must not request permissions'),
+  } };
+  globalThis.fetch = async () => {
+    networkCalls++;
+    return Response.json({ choices: [{ message: { content: '[{"name":"Group","color":"blue","tabIds":[1]}]' } }] });
+  };
+  assert.equal((await api.planGroupByAI([], customSettings, { requestPermission: false }))[0].name, 'Group');
+  assert.equal(networkCalls, 1);
+  chrome.permissions.contains = async () => false;
+  await assert.rejects(api.planGroupByAI([], customSettings, { requestPermission: false }), { name: 'APIAccessRequiredError' });
+  assert.equal(networkCalls, 1);
+});
+
 test('denied host permission prevents network access and heuristic fallback', async () => {
   mockCloud(false, () => { throw Error('Network must not be used'); });
   await assert.rejects(api.planGroupByAI([], customSettings), /授权/);

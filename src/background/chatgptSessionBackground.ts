@@ -1,5 +1,6 @@
-import { BRIDGE_TIMEOUT, SESSION_CHANNEL, SESSION_DOCUMENT, SESSION_TIMEOUT, UI_PATHS, isRecord, isSessionRequest, safeError, trustedSender, withTimeout } from '../services/chatgptSessionProtocol';
-import type { BridgeMethod, SessionReply } from '../services/chatgptSessionProtocol';
+import { BRIDGE_TIMEOUT, SESSION_CHANNEL, SESSION_DOCUMENT, SESSION_TIMEOUT, UI_PATHS, isRecord, isSessionRequest, restoreError, safeError, trustedSender, withTimeout } from '../services/chatgptSessionProtocol';
+import type { BridgeMethod, SessionCommand, SessionReply } from '../services/chatgptSessionProtocol';
+import type { TabData, ProposedGroup } from '../services/aiGrouper';
 
 const HOST_KEY = 'tabflow.chatgptPlan.host.v1';
 const ACCOUNTS_KEY = 'tabflow.chatgptPlan.registrations.v1';
@@ -88,6 +89,21 @@ export async function ensureChatGPTSessionOffscreen(): Promise<void> {
   creation = flight;
   try { await flight; } finally { if (creation === flight) creation = undefined; }
 }
+async function requestHost(payload: Record<string, unknown>): Promise<unknown> {
+  await ensureChatGPTSessionOffscreen();
+  const reply = await withTimeout(chrome.runtime.sendMessage({ channel: SESSION_CHANNEL, ...payload, target: 'host' }) as Promise<SessionReply>, SESSION_TIMEOUT);
+  if (!reply?.ok) throw reply && !reply.ok ? restoreError(reply.error) : new Error('分类宿主未响应。');
+  return reply.value;
+}
+
+export function requestSessionFromBackground(command: SessionCommand, args: unknown[]): Promise<unknown> {
+  return requestHost({ command, args });
+}
+
+export async function groupWithBuiltinInBackground(tabs: TabData[], customPrompt: string): Promise<ProposedGroup[]> {
+  return await requestHost({ event: 'groupBuiltin', tabs, customPrompt }) as ProposedGroup[];
+}
+
 export function registerChatGPTSessionBackground(): void {
   if (registered) return;
   registered = true;
@@ -103,10 +119,8 @@ export function registerChatGPTSessionBackground(): void {
       return true;
     }
     if (!ui || !isSessionRequest(message)) { sendResponse({ ok: false, error: { name: 'SecurityError', message: '拒绝未经授权的会话请求。' } }); return; }
-    void (async () => {
-      await ensureChatGPTSessionOffscreen();
-      return await withTimeout(chrome.runtime.sendMessage({ ...message, target: 'host' }) as Promise<SessionReply>, SESSION_TIMEOUT);
-    })().then(sendResponse, error => sendResponse({ ok: false, error: safeError(error) }));
+    void requestSessionFromBackground(message.command, message.args)
+      .then(value => sendResponse({ ok: true, value }), error => sendResponse({ ok: false, error: safeError(error) }));
     return true;
   });
   chrome.tabs.onRemoved.addListener(tabId => {

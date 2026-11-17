@@ -9,10 +9,20 @@ const storeSource = (await readFile(new URL('../src/services/settingsStore.ts', 
   .replace("'./providerSettings'", JSON.stringify(providerURL));
 const storeURL = urlFor(storeSource);
 const store = await import(storeURL);
-const sessionHostURL = urlFor('export function registerChatGPTSessionBackground() {}');
+const sessionHostURL = urlFor(`
+export function registerChatGPTSessionBackground() {}
+export function requestSessionFromBackground(command, args) { return globalThis.__autoModel.call('chatgpt_plan', args); }
+export function groupWithBuiltinInBackground(...args) { return globalThis.__autoModel.call('chrome_builtin', args); }
+`);
+const modelURL = urlFor(`
+export const CHROME_GROUP_COLORS = ['blue', 'cyan', 'green', 'yellow', 'purple', 'pink', 'red', 'grey'];
+export const DEFAULT_GROUPING_PROMPT = '默认分组';
+export function planGroupByAI(...args) { return globalThis.__autoModel.call('api', args); }
+`);
 const backgroundSource = (await readFile(new URL('../src/background/index.ts', import.meta.url), 'utf8'))
   .replace("'../services/settingsStore'", JSON.stringify(storeURL))
-  .replace("'./chatgptSessionBackground'", JSON.stringify(sessionHostURL));
+  .replace("'./chatgptSessionBackground'", JSON.stringify(sessionHostURL))
+  .replace("'../services/aiGrouper'", JSON.stringify(modelURL));
 const reactURL = urlFor(`
 export const useState = (...args) => globalThis.__settingsHookRunner.useState(...args);
 export const useEffect = (...args) => globalThis.__settingsHookRunner.useEffect(...args);
@@ -163,9 +173,11 @@ test('hook keeps synchronous API, rendered provider target, shared updates and v
   first.stop(); second.stop();
 });
 
-async function backgroundMock(tabs = []) {
-  const mock = storageMock();
-  const state = new Map(tabs.map((tab) => [tab.id, { groupId: -1, pinned: false, ...tab }]));
+async function backgroundMock(tabs = [], settings = {}, classify = () => assert.fail('Unexpected model call')) {
+  const mock = storageMock(settings);
+  const modelCalls = [];
+  globalThis.__autoModel = { call(route, args) { modelCalls.push({ route, args }); return classify(route, args); } };
+  const state = new Map(tabs.map((tab) => [tab.id, { groupId: -1, pinned: false, status: 'complete', ...tab }]));
   const groups = new Map();
   let nextGroup = 100;
   const grouped = [];
@@ -204,10 +216,122 @@ async function backgroundMock(tabs = []) {
     assert.equal(listener(value, {}, resolve), true);
   });
   const update = (id) => chrome.tabs.onUpdated.fire(id, { status: 'complete' });
-  return { ...mock, state, groups, grouped, windows, created, message, update };
+  return { ...mock, state, groups, grouped, windows, created, message, update, modelCalls };
 }
 const tab = (id, windowId = 1, url = 'https://example.org/page/' + id) => ({ id, windowId, url, title: 'Example' });
 async function settle() { for (let index = 0; index < 12; index++) await tick(); }
+
+for (const provider of ['custom', 'openai', 'deepseek', 'codex_native', 'chatgpt_plan', 'chrome_builtin']) {
+  test(`automatic grouping uses selected ${provider} model before domain rules`, async () => {
+    const mock = await backgroundMock([tab(1, 1, 'https://team.feishu.cn/wiki/doc')], {
+      aiSettings: { provider, model: 'selected-model', customPrompt: '我的分类偏好' },
+    }, () => [{ name: '性能排查', color: 'green', tabIds: [1] }]);
+    mock.update(1); await settle();
+    assert.equal(mock.groups.get(mock.state.get(1).groupId).title, '性能排查');
+    assert.equal(mock.modelCalls.length, 1);
+    const { route, args } = mock.modelCalls[0];
+    assert.equal(args[0][0].id, 1);
+    if (provider === 'chatgpt_plan') {
+      assert.equal(route, provider); assert.equal(args[1], 'selected-model'); assert.match(args[2], /我的分类偏好/);
+    } else if (provider === 'chrome_builtin') {
+      assert.equal(route, provider); assert.match(args[1], /我的分类偏好/);
+    } else {
+      assert.equal(args[1].provider, provider); assert.equal(args[1].model, 'selected-model');
+      assert.match(args[1].customPrompt, /我的分类偏好/); assert.deepEqual(args[2], { requestPermission: false });
+    }
+  });
+}
+
+test('successful AI assignment reuses its named group instead of a competing same-domain group', async () => {
+  const mock = await backgroundMock([tab(1), { ...tab(2), groupId: 70 }], { aiSettings: { provider: 'custom' } }, (_route, args) => {
+    assert.match(args[1].customPrompt, /错误旧组/);
+    assert.match(args[1].customPrompt, /性能排查/);
+    return [{ name: '性能排查', color: 'green', tabIds: [1] }];
+  });
+  mock.groups.set(70, { id: 70, windowId: 1, title: '错误旧组' });
+  mock.groups.set(71, { id: 71, windowId: 1, title: '性能排查' });
+  mock.update(1); await settle();
+  assert.equal(mock.state.get(1).groupId, 71);
+  assert.equal(mock.state.get(2).groupId, 70);
+  assert.equal(mock.groups.size, 2);
+});
+
+test('failed or invalid AI response falls back to local rules without moving invented IDs', async () => {
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args);
+  try {
+    for (const result of [new Error('unavailable'), [], [{ name: 'Bad', color: 'blue', tabIds: [2] }]]) {
+      const mock = await backgroundMock([tab(1, 1, 'https://team.feishu.cn/wiki/doc'), tab(2, 2)], {
+        aiSettings: { provider: 'custom' },
+      }, () => { if (result instanceof Error) throw result; return result; });
+      mock.update(1); await settle();
+      assert.equal(mock.groups.get(mock.state.get(1).groupId).title, '文档与工作协同');
+      assert.equal(mock.state.get(2).groupId, -1);
+    }
+    assert.equal(warnings.length, 3);
+  } finally { console.warn = warn; }
+});
+
+test('duplicate completion events while AI is pending produce one request and one assignment', async () => {
+  const gate = defer();
+  const mock = await backgroundMock([tab(1)], { aiSettings: { provider: 'custom' } }, () => gate.promise);
+  mock.update(1); await settle(); mock.update(1); await settle();
+  assert.equal(mock.modelCalls.length, 1);
+  assert.equal(mock.grouped.length, 0);
+  gate.resolve([{ name: '模型结果', color: 'blue', tabIds: [1] }]); await settle();
+  assert.equal(mock.modelCalls.length, 1);
+  assert.equal(mock.grouped.length, 1);
+});
+
+for (const change of ['close', 'pin', 'group', 'url', 'move', 'disabled', 'provider']) {
+  test(`pending AI assignment respects ${change} before committing`, async () => {
+    const gate = defer();
+    const mock = await backgroundMock([tab(1)], { aiSettings: { provider: 'custom' } }, () => gate.promise);
+    mock.update(1); await settle();
+    if (change === 'close') mock.state.delete(1);
+    if (change === 'pin') mock.state.get(1).pinned = true;
+    if (change === 'group') mock.state.get(1).groupId = 50;
+    if (change === 'url') mock.state.get(1).url = 'https://other.test';
+    if (change === 'move') mock.state.get(1).windowId = 2;
+    if (change === 'disabled') await mock.sync.set({ [store.SETTINGS_KEY]: { autoGroupNewTabs: false, aiSettings: { provider: 'custom' } } });
+    if (change === 'provider') await mock.sync.set({ [store.SETTINGS_KEY]: { aiSettings: { provider: 'openai' } } });
+    gate.resolve([{ name: '模型结果', color: 'blue', tabIds: [1] }]); await settle();
+    assert.equal(mock.grouped.length, 0);
+  });
+}
+
+test('auto-group waits for loading to finish before classifying the final page', async () => {
+  const url = 'https://bytedance.larkoffice.com/wiki/document';
+  const mock = await backgroundMock([{ ...tab(1, 1, url), title: 'AI', status: 'loading' }]);
+  chrome.tabs.onUpdated.fire(1, { url, status: 'loading' });
+  await settle();
+  assert.equal(mock.grouped.length, 0);
+  Object.assign(mock.state.get(1), { status: 'complete', title: '评论二期实验推全 block 问题梳理 - 飞书云文档' });
+  mock.update(1);
+  await settle();
+  assert.equal(mock.groups.get(mock.state.get(1).groupId).title, '文档与工作协同');
+});
+
+test('known document hosts take priority over AI keywords in titles and opaque URLs', async () => {
+  for (const host of ['bytedance.larkoffice.com', 'team.feishu.cn']) {
+    const mock = await backgroundMock([{ ...tab(1, 1, `https://${host}/docx/randomAIcode`), title: 'AI' }]);
+    mock.update(1);
+    await settle();
+    assert.equal(mock.groups.get(mock.state.get(1).groupId).title, '文档与工作协同');
+  }
+});
+
+test('auto-group does not pull a still-loading same-domain peer into a group', async () => {
+  const mock = await backgroundMock([tab(1), { ...tab(2), status: 'loading' }]);
+  mock.update(1);
+  await settle();
+  assert.equal(mock.state.get(2).groupId, -1);
+  Object.assign(mock.state.get(2), { status: 'complete' });
+  mock.update(2);
+  await settle();
+  assert.equal(mock.state.get(2).groupId, mock.state.get(1).groupId);
+});
 
 test('three same-domain simultaneous tabs in one window form one group', async () => {
   const mock = await backgroundMock([tab(1), tab(2), tab(3)]);
@@ -250,7 +374,7 @@ test('auto-group failure does not poison window queue or suppress subsequent nav
   } finally { console.warn = warn; }
 });
 
-for (const change of ['close', 'move', 'pin', 'group', 'url']) {
+for (const change of ['close', 'move', 'pin', 'group', 'url', 'loading']) {
   test(`auto-group checks ${change} before committing`, async () => {
     const mock = await backgroundMock([tab(1)]);
     const gate = defer();
@@ -262,6 +386,7 @@ for (const change of ['close', 'move', 'pin', 'group', 'url']) {
     if (change === 'pin') mock.state.get(1).pinned = true;
     if (change === 'group') mock.state.get(1).groupId = 50;
     if (change === 'url') mock.state.get(1).url = 'https://changed.org';
+    if (change === 'loading') mock.state.get(1).status = 'loading';
     gate.resolve(); await settle();
     assert.equal(mock.grouped.length, 0);
   });
