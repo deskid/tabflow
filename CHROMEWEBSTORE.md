@@ -1,6 +1,8 @@
 # Chrome Web Store — TabFlow
 
-更新日期：2026-11-17。准备版本：1.3.0。商店扩展 ID：`pnjgkehmcfheoecnhenfeidkpkdjifkm`。
+更新日期：2026-11-17。发布版本：1.3.0。商店扩展 ID：`pnjgkehmcfheoecnhenfeidkpkdjifkm`。
+
+GitHub [1.3.0 Release](https://github.com/deskid/tabflow/releases/tag/v1.3.0) 已发布，代码提交为 `39397f3`。商店文件包和两张清理功能截图已上传并保存为草稿，尚未提交审核。当前 Chrome 窗口连接中断；恢复后需补齐新增权限理由，更新账号身份与使用活动的数据披露、测试说明，再提交审核。
 
 ## 商店信息
 
@@ -47,6 +49,8 @@ TabFlow 把标签、分组、书签和稍后读放进 Chrome 侧边栏，方便�
 | 归档与重新打开 | 1280×800 PNG | `docs/images/1.3.0/04-archive.png` |
 
 图片取自当前构建的真实界面，使用隔离浏览器与演示数据；AI 建议由本地演示接口返回，不包含用户浏览记录，也不承诺实际模型必然作出相同判断。
+
+本次商店草稿保留现有三张基础功能截图，新增 `02-cleanup-management.png` 和 `03-cleanup-preview.png`，共五张。其余新图随 Release 素材包提供。
 
 ## 权限说明
 
@@ -99,11 +103,11 @@ TabFlow 把标签、分组、书签和稍后读放进 Chrome 侧边栏，方便�
 
 | 版本 | 日期 | 内容 | 状态 |
 | --- | --- | --- | --- |
-| 1.3.0 | 2026-11-17 | 自动清理、全量建议预览、保护与归档恢复、渐进展示与缓存、共享模型配置和通用本机推理 | 准备提交 |
+| 1.3.0 | 2026-11-17 | 自动清理、全量建议预览、保护与归档恢复、渐进展示与缓存、共享模型配置和通用本机推理 | GitHub 已发布；商店草稿已上传，尚未提审 |
 | 1.1.2 | — | 现有商店版本 | 已发布（后台核实） |
 
 ## 发布验证
 
-类型检查、单元回归、生产构建、隔离 Chrome 清理、订阅会话与 OAuth 回调验证见本次发布记录。真实 Codex 验证使用合成页面；模型耗时与归档判断不是固定输出。正式提交前核对公开隐私页面已包含 1.3.0 的清理数据说明。
+类型检查、333 项测试（5 项跳过）、生产构建、隔离 Chrome 清理/恢复、订阅会话与 OAuth 回调验证通过。标签 `v1.3.0` 的 Linux/Windows CI 通过，上传 ZIP 与 CI 构建包的 SHA-256 一致。公开隐私页面已与 1.3.0 源文件逐字节核对一致。真实 Codex 验证使用合成页面；模型耗时与归档判断不是固定输出。
 
 参考：[Chrome 商店更新流程](https://developer.chrome.com/docs/webstore/update)、[商店资料要求](https://developer.chrome.com/docs/webstore/cws-dashboard-listing)。
