@@ -26,6 +26,18 @@ const tabs = [
 const groups = [{ name: '研发资料', color: 'blue', tabIds: [11, 22] }];
 const text = JSON.stringify({ groups });
 const signedIn = { loggedIn: true, planAuthorized: true, account: { id: 'test-account', label: '测试账户' } };
+test('cleanup uses the authenticated response transport with a separate schema and no grouping coercion', async () => {
+  auth.setState(signedIn);
+  chrome.permissions = { contains: async () => true };
+  const decisions = [{ id: 1, action: 'keep', kind: 'other', task: '工作', reason: '用途不明确' }];
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    assert.equal(body.text.format.name, 'tabflow_cleanup');
+    assert.equal(body.store, false);
+    return Response.json({ object: 'response', status: 'completed', output: [{ type: 'message', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify({ decisions }) }] }] });
+  };
+  assert.deepEqual(await api.requestCleanupJSON('{}', 'cleanup', 'test-model', { type: 'object' }), { decisions });
+});
 function responseStream(events, chunkSize = 100000, contentType = 'text/event-stream') {
   const bytes = new TextEncoder().encode(events);
   return new Response(new ReadableStream({ start(controller) {
@@ -358,10 +370,11 @@ test('validated grouping covers every input ID exactly once', () => {
 });
 
 test('the dispatcher routes the new provider through the subscription channel, not native messaging', async () => {
+  const nativeURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(await readFile(new URL('../src/services/nativeInference.ts', import.meta.url), 'utf8'))).toString('base64')}`;
   const dispatcherSource = await readFile(new URL('../src/services/aiGrouper.ts', import.meta.url), 'utf8');
   const builtin = toURL('export function classifyWithBuiltinModel(){throw Error("Unexpected builtin")} export function getBuiltinModelState(){return {}}');
   const dispatch = await import(toURL(stripTypeScriptTypes(dispatcherSource)
-    .replace("'./builtinModel'", JSON.stringify(builtin)).replace("'./chatgptPlanClient'", JSON.stringify(moduleURL))));
+    .replace("'./builtinModel'", JSON.stringify(builtin)).replace("'./nativeInference'", JSON.stringify(nativeURL)).replace("'./chatgptPlanClient'", JSON.stringify(moduleURL))));
   globalThis.chrome.runtime = { sendNativeMessage() { throw new Error('Native host must not be called'); } };
   globalThis.fetch = async () => responseStream(completed());
   assert.deepEqual(await dispatch.planGroupByAI(tabs, { provider: 'chatgpt_plan', model: 'account-model-selected' }), groups);

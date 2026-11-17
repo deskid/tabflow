@@ -35,7 +35,9 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
     if (!msg.params.outputSchema || msg.params.sandboxPolicy.type !== 'readOnly' || msg.params.sandboxPolicy.networkAccess !== false) throw new Error('Unsafe turn');
     if (scenario === 'tool-request') send({ id: 'tool-request', method: 'item/commandExecution/requestApproval', params: { threadId: 'test-thread' } });
     const groups = [{ name: '测试', color: scenario === 'bad-color' ? 'invalid' : 'blue', tabIds: scenario === 'bad-ids' ? [999] : [1, 2] }];
-    const item = { type: 'agentMessage', id: 'final', phase: 'final_answer', text: scenario === 'bad-json' ? 'not JSON' : JSON.stringify({ groups }) };
+    const cleanup = msg.params.outputSchema.required?.includes('decisions');
+    const item = { type: 'agentMessage', id: 'final', phase: 'final_answer', text: scenario === 'bad-json' ? 'not JSON' : JSON.stringify(process.env.TABFLOW_MOCK_JSON ? JSON.parse(process.env.TABFLOW_MOCK_JSON) : cleanup
+      ? { decisions: [{ id: 1, action: 'archive', kind: 'temporary', task: '检索', reason: '长期闲置' }] } : { groups }) };
     // Deliberately race notifications ahead of the turn/start reply.
     notice('item/completed', { threadId: 'test-thread', turnId: 'turn-1', item });
     notice('turn/completed', { threadId: 'test-thread', turn: { id: 'turn-1', status: scenario === 'turn-failed' ? 'failed' : 'completed', items: [item] } });

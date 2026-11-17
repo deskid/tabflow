@@ -4,8 +4,11 @@ import type { SettingsPatch } from '../services/settingsStore';
 import { registerChatGPTSessionBackground, requestSessionFromBackground, groupWithBuiltinInBackground } from './chatgptSessionBackground';
 import { planGroupByAI, CHROME_GROUP_COLORS, DEFAULT_GROUPING_PROMPT } from '../services/aiGrouper';
 import type { AISettings, ProposedGroup } from '../services/aiGrouper';
+import { registerCleanupBackground, isCleanupRestoringTab } from './cleanupBackground';
+import { decideCleanup } from '../services/cleanupAI';
 
 registerChatGPTSessionBackground();
+registerCleanupBackground(decideCleanup);
 
 const writeSettings = createSettingsWriter();
 const windowQueues = new Map<number, Promise<void>>();
@@ -167,12 +170,14 @@ ${JSON.stringify(groups.map(({ title, color }) => ({ name: title, color })))}`;
 async function handleAutoGroupNewTab(tabId: number) {
   let initial: chrome.tabs.Tab;
   try { initial = await chrome.tabs.get(tabId); } catch { return; }
+  if (await isCleanupRestoringTab(initial)) return;
   const windowId = initial.windowId;
   const url = initial.url ?? '';
   if (!eligibleTab(initial, windowId, url)) return;
   return enqueueWindow(windowId, async () => {
     const tab = await freshTab(tabId, windowId, url);
     if (!tab) return;
+    if (await isCleanupRestoringTab(tab)) return;
     const settings = await readSettings();
     if (!settings.autoGroupNewTabs) return;
     const host = hostOf(url);

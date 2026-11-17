@@ -68,3 +68,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-native-hos
 4. 在偏好设置选择「本机 Codex」，刷新认证状态和模型目录。
 
 模型出现在目录中不保证具备调用权限或额度。验证分类时使用公开测试页面，避免发送私人网址、密钥或敏感提示词。
+
+
+## 通用推理协议
+
+分组、清理及后续结构化 AI 任务统一调用 `GENERATE_JSON`，传入提示词、输入、输出 JSON Schema 和可选模型；桥接返回 `data` 与实际模型。业务含义、候选 ID 校验和浏览器操作由扩展负责。协议契约见 [本机结构化推理协议](native-inference-protocol.md)。
+
+桥接 3.0 提供协议版本 1，`PING` 返回 `protocolVersion` 和 `supportedActions`。旧版扩展使用的 `CLASSIFY_TABS`、`CLEANUP_TABS` 保留为兼容适配器；新功能不增加 action。已有旧桥接迁移一次后，同一协议内的新任务只更新扩展。身份认证、Codex CLI 协议或运行能力本身发生变化时，仍可能需要更新桥接。

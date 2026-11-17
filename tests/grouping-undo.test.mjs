@@ -4,13 +4,14 @@ import test from 'node:test';
 import { stripTypeScriptTypes } from 'node:module';
 
 const builtin = await readFile(new URL('../src/services/builtinModel.ts', import.meta.url), 'utf8');
+const nativeURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(await readFile(new URL('../src/services/nativeInference.ts', import.meta.url), 'utf8'))).toString('base64')}`;
 const builtinURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(builtin)).toString('base64')}`;
 const source = await readFile(new URL('../src/services/aiGrouper.ts', import.meta.url), 'utf8');
 const planClientURL = 'data:text/javascript,export function planGroupByChatGPTPlan(){throw Error("Unexpected subscription call")}';
 const api = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)
-  .replace("'./builtinModel'", JSON.stringify(builtinURL)).replace("'./chatgptPlanClient'", JSON.stringify(planClientURL))).toString('base64')}`);
+  .replace("'./builtinModel'", JSON.stringify(builtinURL)).replace("'./nativeInference'", JSON.stringify(nativeURL)).replace("'./chatgptPlanClient'", JSON.stringify(planClientURL))).toString('base64')}`);
 
-function browser(layout, metadata = []) {
+function browser(layout, metadata = [], { currentWindowId = 1 } = {}) {
   let tabs = layout.map(([id, groupId = -1, windowId = 1]) => ({ id, groupId, windowId }));
   const groups = new Map(metadata.map((group) => [group.id, { windowId: 1, title: '', color: 'grey', collapsed: false, ...group }]));
   const calls = [];
@@ -46,7 +47,7 @@ function browser(layout, metadata = []) {
         check('group');
         const selected = tabIds.map((id) => tabs.find((tab) => tab.id === id));
         assert.ok(selected.every(Boolean));
-        const windowId = createProperties?.windowId ?? selected[0].windowId;
+        const windowId = groupId === undefined ? createProperties?.windowId ?? currentWindowId : groups.get(groupId).windowId;
         assert.ok(selected.every((tab) => tab.windowId === windowId));
         if (groupId === undefined) {
           groupId = nextId++;
@@ -81,6 +82,14 @@ function browser(layout, metadata = []) {
 }
 const plan = (...tabIds) => [{ name: '新组', color: 'red', tabIds }];
 const oldGroup = { id: 10, title: '原组', color: 'cyan', collapsed: true };
+
+test('detached views create groups in the source window without moving its tabs', async () => {
+  const mock = browser([[1, -1, 7], [2, -1, 7]], [], { currentWindowId: 11 });
+  const result = await api.executeTabGrouping(plan(1, 2), mock.input());
+  assert.equal(result.createdGroupIds.length, 1);
+  assert.equal(mock.groups.get(result.createdGroupIds[0]).windowId, 7);
+  assert(mock.tabs.every(tab => tab.windowId === 7 && tab.groupId === result.createdGroupIds[0]));
+});
 
 test('recreates an emptied group and restores its title, color, collapse and order from Chrome', async () => {
   const mock = browser([[1], [2, 10], [3, 10], [4], [5]], [oldGroup]);

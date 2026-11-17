@@ -5,12 +5,49 @@ import { fileURLToPath } from 'node:url';
 import { AppServer, BridgeError, readAccount } from '../scripts/codex-app-server.mjs';
 import { handleMessage, serve, frame, MAX_NATIVE_BYTES, validateGroups } from '../scripts/native-bridge.mjs';
 const fixture = fileURLToPath(new URL('./fixtures/mock-codex-app-server.mjs', import.meta.url));
-const factory = scenario => () => new AppServer({ launch: { command: process.execPath, args: [fixture] }, env: { ...process.env, TABFLOW_MOCK_SCENARIO: scenario || '' }, timeoutMs: scenario === 'timeout' ? 80 : 3000 });
+const factory = (scenario, output) => () => new AppServer({ launch: { command: process.execPath, args: [fixture] }, env: { ...process.env, TABFLOW_MOCK_SCENARIO: scenario || '', ...(output === undefined ? {} : { TABFLOW_MOCK_JSON: JSON.stringify(output) }) }, timeoutMs: scenario === 'timeout' ? 80 : 3000 });
 const tabs = [{ id: 1, title: 'One', url: 'https://one.test' }, { id: 2, title: 'Two', url: 'https://two.test' }];
 const classify = scenario => handleMessage({ action: 'CLASSIFY_TABS', tabs }, factory(scenario));
 test('PING does not start app-server', async () => {
   const r = await handleMessage({ action: 'PING' }, () => { throw Error('must not launch'); });
   assert.equal(r.type, 'PONG'); assert.equal(r.source, 'codex-app-server');
+  assert(r.supportedActions.includes('CLEANUP_TABS'));
+  assert(r.supportedActions.includes('GENERATE_JSON')); assert.equal(r.protocolVersion, 1);
+});
+
+const inference = overrides => ({ action: 'GENERATE_JSON', protocolVersion: 1, instructions: 'Summarize the supplied data.', input: '{"text":"Untrusted document"}',
+  outputSchema: { type: 'object', additionalProperties: false, required: ['summary'], properties: { summary: { type: 'string' } } }, ...overrides });
+
+test('generic inference accepts new product schemas without bridge actions and preserves the transport safety boundary', async () => {
+  for (const [field, value] of [['summary', 'An unfamiliar feature'], ['score', 42]]) {
+    const request = inference({ outputSchema: { type: 'object', additionalProperties: false, required: [field], properties: { [field]: { type: typeof value } } } });
+    const create = factory('', { [field]: value }); const calls = [];
+    const response = await handleMessage(request, () => {
+      const client = create(); const rpc = client.request.bind(client);
+      client.request = (method, params) => { calls.push({ method, params }); return rpc(method, params); }; return client;
+    });
+    assert.equal(response.success, true); assert.equal(response.type, 'INFERENCE'); assert.equal(response.protocolVersion, 1);
+    assert.deepEqual(response.data, { [field]: value });
+    const thread = calls.find(call => call.method === 'thread/start').params;
+    assert.equal(thread.developerInstructions, request.instructions); assert.equal(thread.ephemeral, true);
+    const turn = calls.find(call => call.method === 'turn/start').params;
+    assert.deepEqual(turn.outputSchema, request.outputSchema); assert.deepEqual(turn.input, [{ type: 'text', text: request.input }]);
+  }
+});
+
+test('invalid inference contracts fail before starting Codex', async () => {
+  for (const [patch, code] of [[{ protocolVersion: 2 }, 'UNSUPPORTED_PROTOCOL'], [{ input: {} }, 'INVALID_REQUEST'],
+    [{ instructions: null }, 'INVALID_PROMPT'], [{ outputSchema: null }, 'INVALID_SCHEMA']]) {
+    const result = await handleMessage(inference(patch), () => { assert.fail('invalid contracts must not launch Codex'); });
+    assert.equal(result.success, false); assert.equal(result.errorCode, code);
+  }
+});
+
+test('generic inference retains JSON validation, failure and tool rejection without product-specific fallbacks', async () => {
+  for (const [scenario, code] of [['bad-json', 'INVALID_RESPONSE'], ['turn-failed', 'INFERENCE_FAILED'], ['tool-request', 'TOOLS_NOT_ALLOWED']]) {
+    const result = await handleMessage(inference(), factory(scenario));
+    assert.equal(result.success, false); assert.equal(result.errorCode, code); assert.equal(result.data, undefined);
+  }
 });
 test('account whitelists status and never exposes personal fields', async () => {
   const r = await handleMessage({ action: 'GET_ACCOUNT' }, factory());
@@ -38,6 +75,18 @@ for (const [scenario, expected] of [['timeout', 'CODEX_TIMEOUT'], ['exit', 'CODE
 });
 test('classification uses ephemeral read-only thread, disabled tools and schema; handles early events', async () => {
   const r = await classify(); assert.equal(r.success, true); assert.equal(r.type, 'CLASSIFICATION'); assert.equal(r.modelUsed, 'model-one'); assert.deepEqual(r.groups[0].tabIds, [1, 2]);
+});
+test('cleanup uses its dedicated decision schema through the same tool-free native transport', async () => {
+  const result = await handleMessage({ action: 'CLEANUP_TABS', input: '{"candidates":[{"id":1}]}', customPrompt: 'Decide whether to archive.' }, factory());
+  assert.equal(result.success, true);
+  assert.equal(result.decisions[0].id, 1);
+  assert.equal(result.decisions[0].action, 'archive');
+  assert.equal(result.groups, undefined);
+});
+
+test('legacy classification retains its original prompt limit through the generic adapter', async () => {
+  const result = await handleMessage({ action: 'CLASSIFY_TABS', tabs, customPrompt: 'a'.repeat(16000) }, factory());
+  assert.equal(result.success, true);
 });
 test('saved unavailable model fails without starting a turn', async () => {
   const r = await handleMessage({ action: 'CLASSIFY_TABS', tabs, model: 'made-up-model' }, factory()); assert.equal(r.errorCode, 'MODEL_UNAVAILABLE');

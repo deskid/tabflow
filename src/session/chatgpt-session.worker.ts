@@ -1,6 +1,7 @@
 import { BRIDGE_TIMEOUT, isRecord, publicAccount, publicStatus, restoreError, safeError, withTimeout } from '../services/chatgptSessionProtocol';
 import type { BridgeMethod, SessionReply, SessionSender } from '../services/chatgptSessionProtocol';
 import type { TabData } from '../services/aiGrouper';
+import { CLEANUP_DECISION_SCHEMA } from '../services/cleanup';
 
 type Listener = (...args: unknown[]) => void;
 function eventAdapter() {
@@ -51,6 +52,11 @@ async function dispatch(command: unknown, args: unknown[]): Promise<unknown> {
   await boot;
   if (!core || !model) throw new Error('ChatGPT 会话尚未初始化。');
   switch (command) {
+    case 'cleanup': {
+      if (args.length !== 3 || !args.every(arg => typeof arg === 'string') ||
+        String(args[0]).length > 100_000 || String(args[1]).length > 16_000 || String(args[2]).length > 200) break;
+      return model.requestCleanupJSON(args[0] as string, args[1] as string, args[2] as string, CLEANUP_DECISION_SCHEMA);
+    }
     case 'initialize': if (args.length) break; return publicStatus(core.getChatGPTPlanStatus());
     case 'accounts': if (args.length) break; return (await core.getChatGPTPlanAccounts()).map(publicAccount);
     case 'signIn': if (args.length > 1 || args[0] !== undefined && typeof args[0] !== 'string') break; return publicStatus(await core.signInChatGPTPlan(args[0] as string | undefined));

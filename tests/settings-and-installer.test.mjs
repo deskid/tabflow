@@ -10,6 +10,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { getNativeInstallCommand } from '../src/services/nativeCodexSetup.ts';
 
 const sourceURL = (source) => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`;
+const nativeURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(await readFile(new URL('../src/services/nativeInference.ts', import.meta.url), 'utf8'))).toString('base64')}`;
 const providerURL = sourceURL(await readFile(new URL('../src/services/providerSettings.ts', import.meta.url), 'utf8'));
 const store = await import(sourceURL((await readFile(new URL('../src/services/settingsStore.ts', import.meta.url), 'utf8'))
   .replace("'./providerSettings'", JSON.stringify(providerURL))));
@@ -19,7 +20,7 @@ export function getBuiltinModelState() { throw new Error('Built-in model must no
 `);
 const planClientURL = sourceURL('export function planGroupByChatGPTPlan(){throw Error("Unexpected subscription call")}');
 const grouper = await import(sourceURL((await readFile(new URL('../src/services/aiGrouper.ts', import.meta.url), 'utf8'))
-  .replace("'./builtinModel'", JSON.stringify(builtinURL)).replace("'./chatgptPlanClient'", JSON.stringify(planClientURL))));
+  .replace("'./builtinModel'", JSON.stringify(builtinURL)).replace("'./nativeInference'", JSON.stringify(nativeURL)).replace("'./chatgptPlanClient'", JSON.stringify(planClientURL))));
 
 test('fresh and partial settings select local heuristic without altering general preferences', () => {
   assert.equal(store.DEFAULT_SETTINGS.aiSettings.provider, 'heuristic');

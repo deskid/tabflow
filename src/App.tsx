@@ -17,11 +17,16 @@ import { FloatingActionBar } from './components/FloatingActionBar';
 import { StatusBar } from './components/StatusBar';
 import { SettingsModal } from './components/SettingsModal';
 import { UndoToast } from './components/UndoToast';
+import { useCleanup } from './hooks/useCleanup';
+import { ArchiveView } from './components/ArchiveView';
 
 export const App: React.FC = () => {
   const [currentTabType, setCurrentTabType] = useState<MainTabType>('tabs');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [dismissedBatch, setDismissedBatch] = useState('');
+  const cleanup = useCleanup();
   const [groupingError, setGroupingError] = useState('');
   const [windowActionError, setWindowActionError] = useState('');
   const [groupingResult, setGroupingResult] = useState<GroupingExecutionResult | null>(null);
@@ -206,6 +211,7 @@ export const App: React.FC = () => {
     <div className="flex flex-col h-screen w-full bg-[var(--app-bg)] text-[var(--text-high)] font-sans select-none overflow-hidden">
       {/* Top Header */}
       <Header
+        onOpenArchive={() => setArchiveOpen(value => !value)}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         onTriggerAI={async () => {
@@ -246,9 +252,18 @@ export const App: React.FC = () => {
       )}
 
       {/* Navigation Sub-Tabs */}
+      {cleanup.status.lastBatchId && cleanup.status.lastBatchId !== dismissedBatch && cleanup.entries.some(entry => entry.batchId === cleanup.status.lastBatchId) &&
+        <div role="status" className="px-3 py-2 text-[12px] bg-[var(--surface)] border-b-hairline border-[var(--border-subtle)]">
+          <p>{cleanup.status.message}</p><div className="flex gap-3 mt-1 text-[var(--accent-text)]">
+            <button type="button" disabled={cleanup.busy || currentWindowId === null} onClick={() => { void cleanup.restore(cleanup.entries.filter(entry => entry.batchId === cleanup.status.lastBatchId).map(entry => entry.id), currentWindowId ?? undefined).catch(() => {}); }}>撤销</button>
+            <button type="button" onClick={() => setArchiveOpen(true)}>查看</button>
+            <button type="button" onClick={() => setDismissedBatch(cleanup.status.lastBatchId!)}>关闭</button>
+          </div>
+        </div>}
+      {cleanup.error && <div role="alert" className="px-3 py-1 text-[12px] text-[var(--danger-text)]">{cleanup.error}<button type="button" className="ml-2" onClick={cleanup.clearError}>关闭</button></div>}
       <NavTabs
         activeTab={currentTabType}
-        onChangeTab={setCurrentTabType}
+        onChangeTab={tab => { setArchiveOpen(false); setCurrentTabType(tab); }}
         tabsCount={tabs.length}
         readingListUnreadCount={unreadEntries.length}
       />
@@ -265,7 +280,8 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto px-2 py-1 scrollbar-thin">
-        {currentTabType === 'tabs' && (
+        {archiveOpen && <ArchiveView cleanup={cleanup} windowId={currentWindowId} onBack={() => setArchiveOpen(false)} />}
+        {!archiveOpen && currentTabType === 'tabs' && (
           <div className="space-y-0.5">
             {/* Pinned Tabs Section */}
             <PinnedTabsSection
@@ -281,6 +297,8 @@ export const App: React.FC = () => {
               return (
                 <div key={group.id} className="mb-1">
                   <TabGroupHeader
+                    cleanupProtected={cleanup.protectedGroupIds.includes(group.id)}
+                    onToggleCleanupProtection={(id, protect) => { void cleanup.protect('group', id, protect).catch(() => {}); }}
                     group={group}
                     tabCount={gTabs.length}
                     onToggleCollapse={toggleGroupCollapse}
@@ -296,6 +314,9 @@ export const App: React.FC = () => {
                     <div className="pl-1.5 space-y-0.5 border-l-hairline border-[var(--border-subtle)] ml-1.5 my-0.5">
                       {gTabs.map((t) => (
                         <TabItem
+                          cleanupProtected={cleanup.protectedTabIds.includes(t.id!)}
+                          onToggleCleanupProtection={(id, protect) => { void cleanup.protect('tab', id, protect).catch(() => {}); }}
+                          onProtectSite={url => { void cleanup.update({ protectedSites: [...cleanup.config.protectedSites, new URL(url).hostname] }).catch(() => {}); }}
                           key={t.id}
                           tab={t}
                           isActive={t.id === activeTabId}
@@ -329,6 +350,9 @@ export const App: React.FC = () => {
                 )}
                 {groupedStructure.ungrouped.map((t) => (
                   <TabItem
+                    cleanupProtected={cleanup.protectedTabIds.includes(t.id!)}
+                    onToggleCleanupProtection={(id, protect) => { void cleanup.protect('tab', id, protect).catch(() => {}); }}
+                    onProtectSite={url => { void cleanup.update({ protectedSites: [...cleanup.config.protectedSites, new URL(url).hostname] }).catch(() => {}); }}
                     key={t.id}
                     tab={t}
                     isActive={t.id === activeTabId}
@@ -357,7 +381,7 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {currentTabType === 'bookmarks' && (
+        {!archiveOpen && currentTabType === 'bookmarks' && (
           <BookmarksView
             bookmarkTree={bookmarkTree}
             searchQuery={searchQuery}
@@ -369,7 +393,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {currentTabType === 'readingList' && (
+        {!archiveOpen && currentTabType === 'readingList' && (
           <ReadingListView
             entries={readingEntries}
             unreadEntries={unreadEntries}
@@ -410,6 +434,7 @@ export const App: React.FC = () => {
 
       {/* Settings Modal */}
       <SettingsModal
+        currentWindowId={currentWindowId}
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}

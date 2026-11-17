@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Search, Sparkles, ExternalLink, Settings, X } from 'lucide-react';
+import { Search, Sparkles, ExternalLink, Settings, X, Archive } from 'lucide-react';
 
 interface HeaderProps {
   searchQuery: string;
@@ -10,6 +10,7 @@ interface HeaderProps {
   isGrouping: boolean;
   groupingLabel?: string;
   targetAvailable?: boolean;
+  onOpenArchive?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -21,6 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
   isGrouping,
   groupingLabel,
   targetAvailable = true,
+  onOpenArchive,
 }) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +78,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Settings */}
+          <button type="button" onClick={onOpenArchive} title="归档记录" aria-label="归档记录"
+            className="p-1 rounded-md hover:bg-[var(--surface-hover)] text-[var(--text-medium)]"><Archive size={14} /></button>
           <button
             type="button"
             onClick={onOpenSettings}

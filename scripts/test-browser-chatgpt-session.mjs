@@ -80,6 +80,7 @@ globalThis.fetch = async (input, init={}) => {
   const body=JSON.parse(init.body);
   if(body.store!==false || body.stream!==true)throw Error('Fixture request contract mismatch');
   const tabs=JSON.parse(body.input[0].content);
+  if(body.text?.format?.name==='tabflow_cleanup')return fixtureJson({object:'response',status:'completed',output:[{type:'message',status:'completed',content:[{type:'output_text',text:JSON.stringify({decisions:tabs.candidates.map(tab=>({id:tab.id,action:'keep',kind:'other',task:'测试资料',reason:'用途不明确'}))})}]}]});
   return fixtureJson({object:'response',status:'completed',error:null,incomplete_details:null,output:[{type:'message',status:'completed',content:[{type:'output_text',text:JSON.stringify({groups:[{name:'测试资料',color:'blue',tabIds:tabs.map(tab=>tab.id)}]})}]}]});
  }
  throw Error('Unexpected fixture network request');
@@ -122,14 +123,14 @@ async function callSession(evaluate, command, args = []) {
 
 async function testSession(cdp, extensionId) {
   let view = await openSettings(cdp, extensionId);
-  await waitFor(() => view.evaluate('document.body.innerText.includes("Continue with ChatGPT")'), 'initial sign-in state');
+  await waitFor(() => view.evaluate('document.body.innerText.includes("登录 ChatGPT")'), 'initial sign-in state');
   await view.evaluate(`chrome.declarativeNetRequest.updateSessionRules({addRules:[{id:${AUTH_RULE},priority:10,action:{type:'redirect',redirect:{regexSubstitution:chrome.runtime.getURL('mock-authorization.html')+'\\\\1'}},condition:{regexFilter:'^https://auth[.]openai[.]com/api/accounts/authorize([?].*)?$',resourceTypes:['main_frame']}}]})`);
-  await view.evaluate(`([...document.querySelectorAll('button')].find(button=>button.textContent.includes('Continue with ChatGPT'))).click()`);
+  await view.evaluate(`([...document.querySelectorAll('button')].find(button=>button.textContent.includes('登录 ChatGPT'))).click()`);
   await waitFor(() => view.evaluate(`document.body.innerText.includes(${JSON.stringify(EMAIL)}) && [...document.querySelectorAll('select option')].some(option=>option.value===${JSON.stringify(MODEL)})`), 'real core OAuth completion and model catalog', 25_000);
   let text = await view.evaluate('document.body.innerText');
   assert(!text.includes('注册 1') && !text.includes('当前账户：') && !text.includes('关闭后需重新登录'));
   assert(!text.includes('使用自己的 ChatGPT 订阅，无需安装本机组件。实验接入仍在验证。'));
-  assert(!text.includes('Continue with ChatGPT'), 'Connected layout must hide the login CTA.');
+  assert(!text.includes('登录 ChatGPT'), 'Connected layout must hide the login CTA.');
   await view.evaluate(`[...document.querySelectorAll('button')].find(button=>button.textContent.trim()==='浅色')?.click()`);
   await capture(cdp, view.sessionId, 'connected-compact-ui.png');
   const initialStatus = await callSession(view.evaluate, 'initialize');
@@ -155,9 +156,11 @@ async function testSession(cdp, extensionId) {
   assert.equal(restored.loggedIn, true);
   assert.deepEqual(await callSession(view.evaluate, 'group', [model, MODEL]), expected);
   const contextsAfter = await view.evaluate('chrome.runtime.getContexts({contextTypes:["OFFSCREEN_DOCUMENT"]})');
+  const cleanup = await callSession(view.evaluate, 'cleanup', [JSON.stringify({ candidates: [{ id: 11, title: '资料', url: 'https://example.invalid/a' }], context: [] }), 'Return a cleanup decision for each candidate.', MODEL]);
+  assert.deepEqual(cleanup.decisions.map(item => [item.id, item.action]), [[11, 'keep']]);
   assert.equal(contextsAfter[0].documentId, contextsBefore[0].documentId, 'UI/SW restart must reuse the same session host.');
   assert.equal(probeCounts.get('/api/accounts/oauth/token'), 1, 'Reopening UI must not run OAuth again.');
-  assert.equal(probeCounts.get('/v1/responses'), 2, 'Both model calls must complete using the retained session.');
+  assert.equal(probeCounts.get('/v1/responses'), 3, 'Grouping and cleanup calls must complete using the retained session.');
   // A real completed navigation must use that same selected subscription model
   // through the background-owned session, without needing a UI-originated RPC.
   await view.evaluate(`chrome.runtime.sendMessage({action:'UPDATE_AI_SETTINGS',patch:{provider:'chatgpt_plan',model:${JSON.stringify(MODEL)}}})`);
@@ -173,7 +176,7 @@ async function testSession(cdp, extensionId) {
   await cdp.send('Fetch.enable', { patterns: [{ urlPattern: 'https://*', requestStage: 'Request' }] }, autoSession);
   await cdp.send('Page.navigate', { url: 'https://bytedance.larkoffice.com/wiki/automatic-subscription-grouping' }, autoSession);
   await waitFor(() => view.evaluate(`(async()=>{const tab=await chrome.tabs.get(${autoTab.id});return tab.groupId>=0&&(await chrome.tabGroups.get(tab.groupId)).title==='测试资料';})()`), 'selected subscription model automatic assignment');
-  assert.equal(probeCounts.get('/v1/responses'), 3, 'Automatic grouping must invoke the subscription model, rather than the document-domain rules.');
+  assert.equal(probeCounts.get('/v1/responses'), 4, 'Automatic grouping must invoke the subscription model, rather than the document-domain rules.');
   await view.evaluate(`chrome.tabs.remove(${autoTab.id})`);
   const storage = await view.evaluate('(async()=>({local:await chrome.storage.local.get(null),sync:await chrome.storage.sync.get(null),session:await chrome.storage.session.get(null)}))()');
   const encoded = JSON.stringify(storage);
@@ -185,8 +188,8 @@ async function testSession(cdp, extensionId) {
   const loggedOut = await callSession(view.evaluate, 'initialize');
   assert.equal(loggedOut.loggedIn, false);
   assert.equal(probeCounts.get('/api/accounts/oauth/revoke'), 1);
-  await waitFor(() => view.evaluate('document.body.innerText.includes("Continue with ChatGPT")'), 'sign-in CTA after explicit logout');
-  await view.evaluate(`([...document.querySelectorAll('button')].find(button=>button.textContent.includes('Continue with ChatGPT'))).click()`);
+  await waitFor(() => view.evaluate('document.body.innerText.includes("登录 ChatGPT")'), 'sign-in CTA after explicit logout');
+  await view.evaluate(`([...document.querySelectorAll('button')].find(button=>button.textContent.includes('登录 ChatGPT'))).click()`);
   await waitFor(() => view.evaluate(`document.body.innerText.includes(${JSON.stringify(EMAIL)}) && [...document.querySelectorAll('select option')].some(option=>option.value===${JSON.stringify(MODEL)})`), 'returning sign-in using the same registration', 25_000);
   const returning = await callSession(view.evaluate, 'initialize');
   assert.equal(returning.account.id, initialStatus.account.id);

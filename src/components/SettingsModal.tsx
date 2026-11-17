@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Moon, Sun, Monitor, LayoutGrid, List, RotateCcw } from 'lucide-react';
 import { UserSettings } from '../hooks/useSettings';
 import { DEFAULT_GROUPING_PROMPT, type AISettings } from '../services/aiGrouper';
 import { AIProviderSettings } from './AIProviderSettings';
 import { GROUPING_PROMPT_PRESETS } from '../services/groupingPresets';
+import { useCleanup } from '../hooks/useCleanup';
+import { CleanupSettings } from './CleanupSettings';
+import { ArchiveView } from './ArchiveView';
+import { SelectField } from './SelectField';
+import { CleanupPreview } from './CleanupPreview';
+import { CleanupManagement } from './CleanupManagement';
+import type { CleanupPlan } from '../services/cleanup';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,6 +19,7 @@ interface SettingsModalProps {
   error?: string | null;
   onUpdateSettings: (updates: Partial<UserSettings>) => void;
   onUpdateAISettings: (aiUpdates: Partial<AISettings>) => void;
+  currentWindowId?: number | null;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -21,7 +29,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   error,
   onUpdateSettings,
   onUpdateAISettings,
+  currentWindowId,
 }) => {
+  const cleanup = useCleanup();
+  const [view, setView] = useState<'settings' | 'cleanup' | 'preview' | 'archive'>('settings');
+  const [preview, setPreview] = useState<CleanupPlan>();
+  const analyze = () => {
+    setPreview(undefined); setView('preview');
+    void cleanup.preview().then(setPreview).catch(() => {});
+  };
   if (!isOpen) return null;
 
   const { theme, density, autoGroupNewTabs, aiSettings } = settings;
@@ -34,7 +50,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       <div className="w-full max-w-sm rounded-xl bg-[var(--app-bg)] border-hairline border-[var(--border-interactive)] shadow-sm p-4 text-[13px] text-[var(--text-high)] animate-in fade-in duration-200 ease-out">
         {/* Header */}
         <div className="flex items-center justify-between pb-2.5 border-b-hairline border-[var(--border-subtle)]">
-          <span className="font-semibold text-[14px]">偏好设置</span>
+          <span className="font-semibold text-[14px]">{{ settings: '偏好设置', cleanup: '清理管理', preview: '清理建议', archive: '归档记录' }[view]}</span>
           <button
             type="button"
             onClick={onClose}
@@ -45,6 +61,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="py-3 space-y-3.5 max-h-[75vh] overflow-y-auto scrollbar-thin">
+          {view === 'preview' ? <CleanupPreview plan={preview} cleanup={cleanup} onBack={() => setView('cleanup')} onRefresh={analyze} /> : view === 'archive' ? <ArchiveView cleanup={cleanup} windowId={currentWindowId ?? null} backLabel="返回清理管理" onBack={() => setView('cleanup')} /> : view === 'cleanup' ? <CleanupManagement cleanup={cleanup} onBack={() => setView('settings')} onPreview={analyze} onOpenArchive={() => setView('archive')} /> : <>
           {error && <p role="alert" className="break-words text-[12px] text-[var(--text-medium)]">{error}</p>}
           {/* Theme */}
           <div>
@@ -123,6 +140,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div className="h-hairline bg-[var(--border-subtle)]" />
 
+          <CleanupSettings cleanup={cleanup} currentModel={aiSettings} onManage={() => setView('cleanup')} />
+
           <AIProviderSettings active={isOpen} settings={aiSettings} onUpdate={onUpdateAISettings} />
 
           {aiSettings.provider !== 'heuristic' && <>
@@ -145,20 +164,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
 
-              <select
+              <SelectField
                 id="grouping-style"
+                name="grouping-style"
                 value={currentPreset}
                 onChange={(event) => {
                   const preset = GROUPING_PROMPT_PRESETS.find((item) => item.id === event.target.value);
                   if (event.target.value === 'default') onUpdateAISettings({ customPrompt: DEFAULT_GROUPING_PROMPT });
                   else if (preset) onUpdateAISettings({ customPrompt: preset.prompt });
                 }}
-                className="w-full min-w-0 mb-1.5 px-2.5 py-2 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[13px] text-[var(--text-high)] outline-none"
+                containerClassName="mb-1.5"
               >
                 <option value="default">默认</option>
                 {GROUPING_PROMPT_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
                 {currentPreset === 'custom' && <option value="custom">自定义</option>}
-              </select>
+              </SelectField>
 
               <textarea
                 aria-label="分组提示词"
@@ -170,6 +190,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               />
 
             </div>
+          </>}
           </>}
         </div>
 

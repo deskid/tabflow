@@ -3,12 +3,13 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { stripTypeScriptTypes } from 'node:module';
 
+const nativeURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(await readFile(new URL('../src/services/nativeInference.ts', import.meta.url), 'utf8'))).toString('base64')}`;
 const source = await readFile(new URL('../src/services/aiGrouper.ts', import.meta.url), 'utf8');
 const builtinSource = await readFile(new URL('../src/services/builtinModel.ts', import.meta.url), 'utf8');
 const builtinURL = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(builtinSource)).toString('base64')}`;
 const builtinService = await import(builtinURL);
 const planClientURL = 'data:text/javascript,export function planGroupByChatGPTPlan(){throw Error("Unexpected subscription call")}';
-const outputText = stripTypeScriptTypes(source).replace("'./builtinModel'", JSON.stringify(builtinURL))
+const outputText = stripTypeScriptTypes(source).replace("'./builtinModel'", JSON.stringify(builtinURL)).replace("'./nativeInference'", JSON.stringify(nativeURL))
   .replace("'./chatgptPlanClient'", JSON.stringify(planClientURL));
 const api = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 
@@ -54,6 +55,19 @@ test('Codex classification errors propagate instead of invoking heuristics', asy
     { id: 1, title: 'GitHub', url: 'https://github.com', groupId: -1 },
     { id: 2, title: 'GitLab', url: 'https://gitlab.com', groupId: -1 },
   ], { provider: 'codex_native' }), /Selected model is unavailable/);
+});
+
+test('native grouping uses generic inference and validates tab identity in the extension', async () => {
+  const tabs = [{ id: 1, title: 'One', url: 'https://one.test', groupId: -1 }, { id: 2, title: 'Two', url: 'https://two.test', groupId: -1 }];
+  const groups = [{ name: '资料', color: 'blue', tabIds: [1, 2] }];
+  globalThis.chrome = { runtime: { sendNativeMessage(_host, request, callback) {
+    assert.equal(request.action, 'GENERATE_JSON'); assert.equal(request.protocolVersion, 1);
+    assert(request.instructions.includes('只按主题分组')); assert.deepEqual(request.outputSchema.required, ['groups']);
+    callback({ success: true, protocolVersion: 1, data: { groups } });
+  } } };
+  assert.deepEqual(await api.planGroupByCodexNative(tabs, '只按主题分组'), groups);
+  mockNative({ success: true, protocolVersion: 1, data: { groups: [{ ...groups[0], tabIds: [1, 999] }] } });
+  await assert.rejects(api.planGroupByCodexNative(tabs), /未知/);
 });
 
 test('an empty successful classification stays empty', async () => {

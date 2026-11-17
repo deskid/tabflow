@@ -12,6 +12,8 @@ interface TabGroupHeaderProps {
   onUngroup: (groupId: number) => void;
   onAddTabInGroup: (groupId: number) => void;
   onSaveAsBookmarkFolder: (groupTitle: string, groupId: number) => void;
+  cleanupProtected?: boolean;
+  onToggleCleanupProtection?: (groupId: number, protect: boolean) => void;
 }
 
 const RADIX_COLOR_MAP: Record<ChromeGroupColor, { bg: string; border: string; text: string; badge: string }> = {
@@ -34,6 +36,8 @@ export const TabGroupHeader: React.FC<TabGroupHeaderProps> = ({
   onUngroup,
   onAddTabInGroup,
   onSaveAsBookmarkFolder,
+  cleanupProtected,
+  onToggleCleanupProtection,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempTitle, setTempTitle] = useState(group.title || '');
@@ -119,6 +123,8 @@ export const TabGroupHeader: React.FC<TabGroupHeaderProps> = ({
           <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg bg-[var(--app-bg)] border-hairline border-[var(--border-interactive)] p-1 text-[12px] text-[var(--text-high)] shadow-xs animate-in fade-in duration-150 ease-out">
             {/* Color Palette */}
+            {onToggleCleanupProtection && <button type="button" className="w-full text-left px-2 py-1 rounded-md hover:bg-[var(--surface-hover)]"
+              onClick={() => { onToggleCleanupProtection(group.id, !cleanupProtected); setShowMenu(false); }}>{cleanupProtected ? '允许自动清理此分组' : '本次会话保护此分组'}</button>}
             <div className="flex items-center justify-between p-1.5 pb-2">
               {CHROME_GROUP_COLORS.map((col) => (
                 <button

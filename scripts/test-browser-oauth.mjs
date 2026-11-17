@@ -213,12 +213,12 @@ async function renderSubscriptionUI(cdp, extensionId) {
     select.value = 'chatgpt_plan';
     select.dispatchEvent(new Event('change', { bubbles: true }));
   })()`);
-  await waitFor(() => evaluate('document.body.innerText.includes("Continue with ChatGPT")'), 'ChatGPT sign-in button');
+  await waitFor(() => evaluate('document.body.innerText.includes("登录 ChatGPT")'), 'ChatGPT sign-in button');
   await cdp.send('Emulation.setDeviceMetricsOverride', {
     width: 900, height: 1000, deviceScaleFactor: 1, mobile: false,
   }, sessionId);
   await capture(cdp, sessionId, 'subscription-ui.png');
-  console.log('Subscription provider and Continue with ChatGPT button rendered.');
+  console.log('Subscription provider and 登录 ChatGPT button rendered.');
   return { evaluate, options };
 }
 

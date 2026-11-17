@@ -19,10 +19,14 @@ export const CHROME_GROUP_COLORS = ['blue', 'cyan', 'green', 'yellow', 'purple',
 export const DEFAULT_GROUPING_PROMPT = '默认分组';
 export function planGroupByAI(...args) { return globalThis.__autoModel.call('api', args); }
 `);
+const cleanupHostURL = urlFor('export function registerCleanupBackground() {} export async function isCleanupRestoringTab() { return false; }');
+const cleanupModelURL = urlFor('export async function decideCleanup() { throw new Error("Unexpected cleanup call"); }');
 const backgroundSource = (await readFile(new URL('../src/background/index.ts', import.meta.url), 'utf8'))
   .replace("'../services/settingsStore'", JSON.stringify(storeURL))
   .replace("'./chatgptSessionBackground'", JSON.stringify(sessionHostURL))
-  .replace("'../services/aiGrouper'", JSON.stringify(modelURL));
+  .replace("'../services/aiGrouper'", JSON.stringify(modelURL))
+  .replace("'./cleanupBackground'", JSON.stringify(cleanupHostURL))
+  .replace("'../services/cleanupAI'", JSON.stringify(cleanupModelURL));
 const reactURL = urlFor(`
 export const useState = (...args) => globalThis.__settingsHookRunner.useState(...args);
 export const useEffect = (...args) => globalThis.__settingsHookRunner.useEffect(...args);

@@ -7,7 +7,7 @@ export const SESSION_ORIGINS = ['https://auth.openai.com/*', 'https://api.openai
 export const SESSION_TIMEOUT = 210_000;
 export const BRIDGE_TIMEOUT = 25_000;
 export const UI_PATHS = ['options.html', 'popup.html', 'sidepanel.html'] as const;
-export type SessionCommand = 'initialize' | 'accounts' | 'signIn' | 'signOut' | 'models' | 'group';
+export type SessionCommand = 'initialize' | 'accounts' | 'signIn' | 'signOut' | 'models' | 'group' | 'cleanup';
 export type BridgeMethod = 'storage.get' | 'storage.set' | 'tabs.create' | 'tabs.update' | 'tabs.remove' | 'permissions.contains' | 'dnr.updateSessionRules';
 export interface SafeSessionError { name: string; message: string; status?: number; code?: string; requestId?: string }
 export type SessionReply = { ok: true; value: unknown } | { ok: false; error: SafeSessionError };
@@ -20,7 +20,7 @@ export function trustedSender(sender: SessionSender, extensionId: string, paths:
 }
 export function isSessionRequest(value: unknown): value is SessionRequest {
   return isRecord(value) && value.channel === SESSION_CHANNEL && ['background', 'host'].includes(String(value.target)) &&
-    ['initialize', 'accounts', 'signIn', 'signOut', 'models', 'group'].includes(String(value.command)) && Array.isArray(value.args);
+    ['initialize', 'accounts', 'signIn', 'signOut', 'models', 'group', 'cleanup'].includes(String(value.command)) && Array.isArray(value.args);
 }
 export function safeError(error: unknown): SafeSessionError {
   // Core messages already exclude HTTP bodies and credentials. Never clone Error objects/stacks.

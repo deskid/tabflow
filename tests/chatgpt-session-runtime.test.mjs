@@ -288,6 +288,7 @@ async function workerFixture(options = {}) {
   const authURL = dataURL(environment + sources.auth + `\n// ${key}`);
   const modelURL = dataURL(environment + sources.model.replace("'./chatgptPlanAuth'", JSON.stringify(authURL)));
   let workerSource = source('worker').replace('const scope = globalThis', `const scope = globalThis[${JSON.stringify(key)}].scope`)
+    .replace("'../services/cleanup'", JSON.stringify(dataURL(stripTypeScriptTypes(await readFile(new URL('../src/services/cleanup.ts', import.meta.url), 'utf8')))))
     .replace("import('../services/chatgptPlanAuth')", `import(${JSON.stringify(authURL)})`).replace("import('../services/chatgptPlan')", `import(${JSON.stringify(modelURL)})`);
   await import(dataURL(workerSource + `\n// ${key}`));
   const send = message => receive({ data: message });

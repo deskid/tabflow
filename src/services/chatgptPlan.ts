@@ -51,7 +51,7 @@ export class ChatGPTPlanAPIError extends Error {
 async function requireAPIAccess(): Promise<void> {
   const status = getChatGPTPlanStatus();
   if (!status.loggedIn || !status.planAuthorized) {
-    throw authRequired('请先通过 Continue with ChatGPT 登录，并授权使用自己的订阅。');
+    throw authRequired('请先登录 ChatGPT，并授权使用自己的订阅。');
   }
   if (typeof chrome === 'undefined' || !chrome.permissions?.contains ||
       !await chrome.permissions.contains({ origins: [`${API_ORIGIN}/*`] })) {
@@ -309,4 +309,14 @@ export async function planGroupByChatGPTPlan(tabs: TabData[], settings: { model?
       text: { format: { type: 'json_schema', name: 'tabflow_groups', strict: true, schema } },
     }),
   }, async (response) => validateChatGPTPlanGroups(await readChatGPTPlanResponse(response), tabs));
+}
+
+/** Called only by the trusted session worker for the shared AI cleanup model. */
+export async function requestCleanupJSON(input: string, instructions: string, model: string, schema: object): Promise<unknown> {
+  if (!model.trim()) throw authRequired('请先在 AI 引擎设置中选择订阅模型。');
+  return withPlanRequest('/v1/responses', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, instructions, input: [{ role: 'user', content: input }], store: false, stream: true,
+      text: { format: { type: 'json_schema', name: 'tabflow_cleanup', strict: true, schema } } }),
+  }, async response => JSON.parse(await readChatGPTPlanResponse(response)));
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, CheckCircle2, Copy, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Check, CheckCircle2, Copy, LoaderCircle, LogIn, RefreshCw } from 'lucide-react';
 import { BuiltinModelStatus } from './BuiltinModelStatus';
+import { SelectField } from './SelectField';
 import { getNativeInstallCommand } from '../services/nativeCodexSetup';
 import {
   getChatGPTPlanAccounts, getChatGPTPlanModels, getChatGPTPlanStatus,
@@ -27,7 +28,7 @@ interface CodexGuide {
 
 const PROVIDERS: Array<{ id: AISettings['provider']; label: string }> = [
   { id: 'codex_native', label: '本机 Codex' },
-  { id: 'chatgpt_plan', label: 'ChatGPT 订阅（实验）' },
+  { id: 'chatgpt_plan', label: 'ChatGPT 订阅' },
   { id: 'custom', label: '自定义 API' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'deepseek', label: 'DeepSeek' },
@@ -35,7 +36,7 @@ const PROVIDERS: Array<{ id: AISettings['provider']; label: string }> = [
   { id: 'chrome_builtin', label: 'Chrome 端侧模型' },
 ];
 
-const fieldClass = 'w-full min-w-0 px-2.5 py-2 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[13px] text-[var(--text-high)] outline-none';
+const fieldClass = 'h-8 w-full min-w-0 px-2.5 py-1.5 rounded-md bg-[var(--app-bg)] border-hairline border-[var(--border-subtle)] focus:border-[var(--accent-border)] text-[13px] text-[var(--text-high)] outline-none';
 
 function planAccountLabel(account: ChatGPTPlanAccount, accounts: ChatGPTPlanAccount[]): string {
   const identity = account.email || 'ChatGPT 账户';
@@ -202,9 +203,9 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
           </>
         ) : (
           <button type="button" disabled={!!pending} onClick={() => { void signIn(accounts.at(-1)?.id); }}
-            className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--accent-text)] px-3 py-2 text-[13px] text-[var(--app-bg)] disabled:opacity-50">
-            {pending === 'signin' && <LoaderCircle size={15} className="animate-spin" />}
-            Continue with ChatGPT
+            className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border-hairline border-[var(--border-subtle)] bg-[var(--app-bg)] px-2.5 py-1.5 text-[12px] text-[var(--accent-text)] hover:bg-[var(--surface-hover)] disabled:opacity-50">
+            {pending === 'signin' ? <LoaderCircle aria-hidden="true" size={14} className="animate-spin" /> : <LogIn aria-hidden="true" size={14} />}
+            登录 ChatGPT
           </button>
         )}
         {!hydrating && (session.loggedIn || accounts.length > 0) && <select
@@ -216,7 +217,7 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
             else if (action === 'reauthorize') void signIn(sessionAccount);
             else if (action.startsWith('account:')) void signIn(action.slice('account:'.length));
           }}
-          className="h-8 w-8 shrink-0 cursor-pointer appearance-none rounded-md border-hairline border-[var(--border-subtle)] bg-[var(--app-bg)] text-center text-[16px] text-[var(--text-medium)] outline-none focus:border-[var(--accent-border)] disabled:opacity-50">
+          className="ml-auto h-8 w-8 shrink-0 cursor-pointer appearance-none rounded-md border-hairline border-[var(--border-subtle)] bg-[var(--app-bg)] text-center text-[16px] text-[var(--text-medium)] outline-none focus:border-[var(--accent-border)] disabled:opacity-50">
           <option value="" disabled>⋯</option>
           {accounts.some((account) => account.id !== sessionAccount) && <optgroup label="切换账户">
             {accounts.filter((account) => account.id !== sessionAccount).map((account) => (
@@ -230,15 +231,15 @@ function ChatGPTPlanSettings({ model, onUpdate }: Pick<Props, 'onUpdate'> & { mo
       </div>
       {!hydrating && authorized && <div className="flex items-center gap-2.5">
         <label htmlFor="chatgpt-plan-model" className="w-7 shrink-0 text-[12px] font-medium text-[var(--text-medium)]">模型</label>
-        <select id="chatgpt-plan-model" className={fieldClass} value={modelInCatalog ? model : ''}
+        <SelectField id="chatgpt-plan-model" name="chatgpt-plan-model" containerClassName="flex-1" value={modelInCatalog ? model : ''}
           disabled={loading || !!pending || !models.length}
           onChange={(event) => onUpdate({ model: event.target.value })}>
           {!modelInCatalog && <option value="">{loading ? '正在读取模型…' : '暂无可用模型'}</option>}
           {models.map((item) => <option key={item.id} value={item.id}>{item.name}{item.isDefault ? '（默认）' : ''}</option>)}
-        </select>
+        </SelectField>
         <button type="button" disabled={loading || !!pending} title="刷新模型目录" aria-label="刷新模型目录"
           onClick={() => { void loadModels(); }}
-          className="shrink-0 rounded-md border-hairline border-[var(--border-subtle)] px-2 py-2 text-[var(--accent-text)] disabled:opacity-50">
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-hairline border-[var(--border-subtle)] text-[var(--accent-text)] hover:bg-[var(--surface-hover)] disabled:opacity-50">
           {loading ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
         </button>
       </div>}
@@ -392,11 +393,11 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
   return (
     <section className="space-y-3">
       <div>
-        <label htmlFor="ai-provider" className="block mb-1.5 text-[12px] font-medium text-[var(--text-medium)]">分类引擎</label>
-        <select id="ai-provider" className={fieldClass} value={provider}
+        <label htmlFor="ai-provider" className="block mb-1.5 text-[12px] font-medium text-[var(--text-medium)]">AI 引擎</label>
+        <SelectField id="ai-provider" name="ai-provider" value={provider}
           onChange={(event) => onUpdate({ provider: event.target.value as AISettings['provider'] })}>
           {PROVIDERS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-        </select>
+        </SelectField>
       </div>
 
       {provider === 'chrome_builtin' && <BuiltinModelStatus />}
@@ -431,17 +432,17 @@ export function AIProviderSettings({ active, settings, onUpdate }: Props) {
                 <input id="ai-model" className={fieldClass} value={model} placeholder="模型 ID"
                   onChange={(event) => onUpdate({ model: event.target.value })} />
               ) : (
-                <select id="ai-model" className={fieldClass} value={model} disabled={loading}
+                <SelectField id="ai-model" name="ai-model" containerClassName="flex-1" value={model} disabled={loading}
                   onChange={(event) => onUpdate({ model: event.target.value })}>
                   <option value="">{provider === 'codex_native' ? 'Codex 默认模型' : '选择模型'}</option>
                   {savedModelMissing && <option value={model}>{model}</option>}
                   {models.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
+                </SelectField>
               )}
               <button type="button" disabled={loading || (provider === 'custom' && !apiEndpoint.trim())}
                 onClick={() => { void loadModels(true); }} title={needsAccess ? '授权并获取模型' : '刷新模型'}
                 aria-label={needsAccess ? '授权并获取模型' : '刷新模型'}
-                className="shrink-0 flex items-center gap-1.5 rounded-md border-hairline border-[var(--border-subtle)] px-2.5 py-2 text-[var(--accent-text)] hover:bg-[var(--surface-hover)] disabled:opacity-50">
+                className={`h-8 shrink-0 flex items-center justify-center gap-1.5 rounded-md border-hairline border-[var(--border-subtle)] text-[var(--accent-text)] hover:bg-[var(--surface-hover)] disabled:opacity-50 ${needsAccess ? 'px-2.5' : 'w-8'}`}>
                 {loading ? <LoaderCircle size={15} className="animate-spin" /> : <RefreshCw size={15} />}
                 {needsAccess && <span className="text-[12px]">连接</span>}
               </button>

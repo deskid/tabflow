@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "TabFlow - 垂直标签与智能分组",
-  "version": "1.2.2",
-  "version_name": "1.2.2 ChatGPT plan preview",
+  "version": "1.3.0",
+  "version_name": "1.3.0",
   "minimum_chrome_version": "120",
-  "description": "在 Chrome 侧边栏管理标签与分组，整合书签和稍后读，支持本地规则及可选 AI 分类。",
+  "description": "在 Chrome 侧边栏管理标签、分组、书签与稍后读，支持智能分组、闲置标签自动归档及可选 AI 判断。",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -15,6 +15,7 @@
     "tabs",
     "tabGroups",
     "storage",
+    "alarms",
     "favicon",
     "bookmarks",
     "readingList",
@@ -29,8 +30,13 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["oauth-callback.html"],
-      "matches": ["http://127.0.0.1/*", "https://auth.openai.com/*"]
+      "resources": [
+        "oauth-callback.html"
+      ],
+      "matches": [
+        "http://127.0.0.1/*",
+        "https://auth.openai.com/*"
+      ]
     }
   ],
   "background": {

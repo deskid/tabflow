@@ -17,6 +17,9 @@ interface TabItemProps {
   onDragStart: (e: React.DragEvent, tabId: number) => void;
   onDragOver: (e: React.DragEvent, tabId: number) => void;
   onDrop: (e: React.DragEvent, tabId: number) => void;
+  cleanupProtected?: boolean;
+  onToggleCleanupProtection?: (tabId: number, protect: boolean) => void;
+  onProtectSite?: (url: string) => void;
 }
 
 export const TabItem: React.FC<TabItemProps> = ({
@@ -34,6 +37,9 @@ export const TabItem: React.FC<TabItemProps> = ({
   onDragStart,
   onDragOver,
   onDrop,
+  cleanupProtected,
+  onToggleCleanupProtection,
+  onProtectSite,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
@@ -62,7 +68,7 @@ export const TabItem: React.FC<TabItemProps> = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setMenuPos({ x: Math.min(e.clientX, window.innerWidth - 170), y: Math.min(e.clientY, window.innerHeight - 190) });
+    setMenuPos({ x: Math.max(8, Math.min(e.clientX, window.innerWidth - 170)), y: Math.max(8, Math.min(e.clientY, window.innerHeight - 280)) });
     setShowMenu(true);
   };
 
@@ -174,9 +180,13 @@ export const TabItem: React.FC<TabItemProps> = ({
         >
           <div
             style={{ left: menuPos.x, top: menuPos.y }}
-            className="fixed z-50 w-40 rounded-lg bg-[var(--app-bg)] border-hairline border-[var(--border-interactive)] shadow-xs p-1 text-[12px] text-[var(--text-high)] animate-in fade-in duration-150 ease-out"
+            className="fixed z-50 w-40 max-h-[calc(100vh-16px)] overflow-y-auto rounded-lg bg-[var(--app-bg)] border-hairline border-[var(--border-interactive)] shadow-xs p-1 text-[12px] text-[var(--text-high)] animate-in fade-in duration-150 ease-out"
             onClick={(e) => e.stopPropagation()}
           >
+            {onToggleCleanupProtection && <button type="button" className="w-full text-left px-2 py-1 rounded-md hover:bg-[var(--surface-hover)]"
+              onClick={() => { onToggleCleanupProtection(tabId, !cleanupProtected); setShowMenu(false); }}>{cleanupProtected ? '允许自动清理此标签' : '本次会话保留此标签'}</button>}
+            {onProtectSite && /^https?:\/\//.test(tab.url ?? '') && <button type="button" className="w-full text-left px-2 py-1 rounded-md hover:bg-[var(--surface-hover)]"
+              onClick={() => { onProtectSite(tab.url!); setShowMenu(false); }}>保护此网站</button>}
             <button
               type="button"
               className="w-full text-left px-2 py-1 rounded-md hover:bg-[var(--surface-hover)] flex items-center justify-between transition-colors duration-150 ease-out"
