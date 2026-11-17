@@ -1,8 +1,8 @@
 # Chrome Web Store — TabFlow
 
-更新日期：2026-11-17。发布版本：1.3.0。商店扩展 ID：`pnjgkehmcfheoecnhenfeidkpkdjifkm`。
+更新日期：2026-11-17。发布版本：1.3.1。商店扩展 ID：`pnjgkehmcfheoecnhenfeidkpkdjifkm`。
 
-GitHub [1.3.0 Release](https://github.com/deskid/tabflow/releases/tag/v1.3.0) 已发布，代码提交为 `39397f3`。商店文件包和两张清理功能截图已上传并保存为草稿，尚未提交审核。当前 Chrome 窗口连接中断；恢复后需补齐新增权限理由，更新账号身份与使用活动的数据披露、测试说明，再提交审核。
+1.3.1 修复清理结果遗漏问题，沿用 3.0.0 桥接。发布包见 [1.3.1 Release](https://github.com/deskid/tabflow/releases/tag/v1.3.1)。商店当前仍为 1.3.0 草稿，尚未提交审核；须先替换为 1.3.1，再补齐新增权限理由、账号身份与使用活动的数据披露及测试说明。当前 Chrome 窗口连接中断。
 
 ## 商店信息
 
@@ -96,18 +96,19 @@ TabFlow 把标签、分组、书签和稍后读放进 Chrome 侧边栏，方便�
 - 发布者：deskid。联系邮箱：deskidzhou@gmail.com。
 - 分发：沿用现有公开发布与地区配置。
 - 审核说明：[store/reviewer-guide.md](store/reviewer-guide.md)。基础路径无需测试账号、API Key 或本机桥接；可选模型服务需要用户自己的可用授权。
-- 版本包：`artifacts/chrome-web-store/tabflow-1.3.0-chrome-web-store.zip`。上传包不含开发公钥，线下包保留公钥；不包含测试、脚本、配置密钥或开发产物。
+- 版本包：`artifacts/chrome-web-store/tabflow-1.3.1-chrome-web-store.zip`。上传包不含开发公钥，线下包保留公钥；不包含测试、脚本、配置密钥或开发产物。
 - 本机 Codex 用户需更新桥接至 3.0.0 或更新版本，桥接不包含在扩展上传包内。
 
 ## 版本记录
 
 | 版本 | 日期 | 内容 | 状态 |
 | --- | --- | --- | --- |
-| 1.3.0 | 2026-11-17 | 自动清理、全量建议预览、保护与归档恢复、渐进展示与缓存、共享模型配置和通用本机推理 | GitHub 已发布；商店草稿已上传，尚未提审 |
+| 1.3.1 | 2026-11-17 | 按候选 ID 约束完整结果、本机小批次分析、缺失结果保留页面 | 修复版；待替换商店草稿 |
+| 1.3.0 | 2026-11-17 | 自动清理、全量建议预览、保护与归档恢复、渐进展示与缓存、共享模型配置和通用本机推理 | GitHub 已发布；商店旧草稿待 1.3.1 替换，不应提审 |
 | 1.1.2 | — | 现有商店版本 | 已发布（后台核实） |
 
 ## 发布验证
 
-类型检查、333 项测试（5 项跳过）、生产构建、隔离 Chrome 清理/恢复、订阅会话与 OAuth 回调验证通过。标签 `v1.3.0` 的 Linux/Windows CI 通过，上传 ZIP 与 CI 构建包的 SHA-256 一致。公开隐私页面已与 1.3.0 源文件逐字节核对一致。真实 Codex 验证使用合成页面；模型耗时与归档判断不是固定输出。
+类型检查、335 项测试（5 项跳过）、生产构建、隔离 Chrome 清理/恢复、订阅会话与 OAuth 回调验证通过。1.3.0 的 Linux/Windows CI 与包校验通过；1.3.1 另行执行 CI。真实浏览器覆盖 14 个页面、8 个 AI 候选，以两批完成且 ID 完整；预览没有关闭页面。公开隐私页面随版本更新。真实 Codex 验证使用合成页面；模型耗时与归档判断不是固定输出。
 
 参考：[Chrome 商店更新流程](https://developer.chrome.com/docs/webstore/update)、[商店资料要求](https://developer.chrome.com/docs/webstore/cws-dashboard-listing)。

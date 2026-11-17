@@ -11,6 +11,7 @@ const modelRequests = [];
 const modelPrompts = [];
 const customPrompt = '仅归档失去用途的测试搜索页。';
 let failFirstPreview = true;
+let incompletePreview = true;
 let holdPreview = false, releasePreview;
 const server = createServer(async (request, response) => {
   if (request.url === '/v1/chat/completions') {
@@ -21,11 +22,16 @@ const server = createServer(async (request, response) => {
       response.writeHead(503, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ error: { message: '预览测试：服务暂时不可用' } })); return;
     }
+    if (incompletePreview) {
+      incompletePreview = false;
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { content: '{"decisions":{}}' } }] })); return;
+    }
     if (holdPreview) { holdPreview = false; await new Promise(resolve => { releasePreview = resolve; }); }
     response.writeHead(200, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ decisions: input.candidates.map(tab => ({
-      id: tab.id, action: 'archive', kind: 'temporary', task: '测试资料', reason: '闲置的测试搜索资料',
-    })) }) } }] })); return;
+    response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ decisions: Object.fromEntries(input.candidates.map(tab => [tab.id, {
+      action: 'archive', kind: 'temporary', task: '测试资料', reason: '闲置的测试搜索资料',
+    }])) }) } }] })); return;
   }
   response.writeHead(200, { 'Content-Type': 'text/html;charset=utf-8' });
   response.end(`<title>清理测试资料</title><p>Isolated TabFlow cleanup fixture</p>`);
@@ -101,6 +107,9 @@ try {
   assert.equal(await evaluate(`(() => { const section=document.querySelector('section[aria-label="全部页面清理建议"]'); const message=section.querySelector('[role="alert"]').textContent; return section.textContent.split(message).length-1; })()`), 1, 'preview error must appear once');
   assert.equal(await evaluate(`Promise.all(${JSON.stringify(fixture.ids)}.map(id=>chrome.tabs.get(id))).then(tabs=>tabs.length)`), 2);
   await capture(cdp, sessionId, 'cleanup-preview-error.png');
+  await evaluate(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='重新分析').click()`);
+  await waitFor(() => evaluate('document.querySelector("section[aria-label=全部页面清理建议] [role=alert]")?.textContent.includes("当前需要 2 项")'), 'incomplete result error');
+  assert.equal(await evaluate(`Promise.all(${JSON.stringify(fixture.ids)}.map(id=>chrome.tabs.get(id))).then(tabs=>tabs.length)`), 2, 'incomplete model output must not close any pages');
   holdPreview = true;
   const previewStarted = performance.now();
   await evaluate(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='重新分析').click()`);

@@ -1,7 +1,7 @@
 import { BRIDGE_TIMEOUT, isRecord, publicAccount, publicStatus, restoreError, safeError, withTimeout } from '../services/chatgptSessionProtocol';
 import type { BridgeMethod, SessionReply, SessionSender } from '../services/chatgptSessionProtocol';
 import type { TabData } from '../services/aiGrouper';
-import { CLEANUP_DECISION_SCHEMA } from '../services/cleanup';
+import { cleanupDecisionSchema } from '../services/cleanup';
 
 type Listener = (...args: unknown[]) => void;
 function eventAdapter() {
@@ -55,7 +55,8 @@ async function dispatch(command: unknown, args: unknown[]): Promise<unknown> {
     case 'cleanup': {
       if (args.length !== 3 || !args.every(arg => typeof arg === 'string') ||
         String(args[0]).length > 100_000 || String(args[1]).length > 16_000 || String(args[2]).length > 200) break;
-      return model.requestCleanupJSON(args[0] as string, args[1] as string, args[2] as string, CLEANUP_DECISION_SCHEMA);
+      return model.requestCleanupJSON(args[0] as string, args[1] as string, args[2] as string,
+        cleanupDecisionSchema(JSON.parse(args[0] as string).candidates));
     }
     case 'initialize': if (args.length) break; return publicStatus(core.getChatGPTPlanStatus());
     case 'accounts': if (args.length) break; return (await core.getChatGPTPlanAccounts()).map(publicAccount);

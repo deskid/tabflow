@@ -121,7 +121,9 @@ export function createCleanupController(decide: Decide, now = () => Date.now()) 
     const key = (tab: CleanupCandidate, time = snapshot.time) => JSON.stringify([settings.revision, sharedModelKey, tab.url, tab.title, tab.lastUsed, tab.visits,
       tab.windowId, tab.groupId, tab.groupTitle, Math.floor((time - tab.lastUsed) / HOUR), contextKey]);
     const sorted = snapshot.candidates.sort((a, b) => (state.cache[a.id]?.at ?? 0) - (state.cache[b.id]?.at ?? 0));
-    const candidates = manual ? sorted : sorted.slice(0, 40);
+    // Native turns have a 90-second deadline; smaller batches publish progress before a large reply can time out.
+    const batchSize = model?.provider === 'codex_native' ? 4 : 40;
+    const candidates = manual ? sorted : sorted.slice(0, batchSize);
     const pages = async (decisions: CleanupDecision[]): Promise<CleanupPreviewPage[]> => {
       if (!manual) return [];
       const latest = await queue(collect);
@@ -162,8 +164,8 @@ export function createCleanupController(decide: Decide, now = () => Date.now()) 
       if (unresolved.length) {
         await queue(async () => { const current = await session(); current.lastEvaluationAt = now(); current.lastModelKey = sharedModelKey; await saveSession(current); });
       }
-      for (let offset = 0; offset < unresolved.length; offset += 40) {
-        const batch = unresolved.slice(offset, offset + 40);
+      for (let offset = 0; offset < unresolved.length; offset += batchSize) {
+        const batch = unresolved.slice(offset, offset + batchSize);
         if (manual) await status({ message: `AI 判断中，剩余 ${unresolved.length - offset} 个页面` });
         const fresh = await decide(batch, context, settings.tier, model, settings.prompt);
         if (!manual && activityRevision !== revision) throw new Error('浏览状态已变化，本轮清理已跳过，稍后重新判断。');

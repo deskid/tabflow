@@ -66,9 +66,23 @@ export const CLEANUP_DECISION_SCHEMA = {
       } } },
   },
 };
+/** Required properties bind structured output to this batch, including keep/uncertain results. */
+export function cleanupDecisionSchema(candidates: readonly Pick<CleanupCandidate, 'id'>[]): object {
+  const { id: _id, ...properties } = CLEANUP_DECISION_SCHEMA.properties.decisions.items.properties;
+  const decision = { type: 'object', additionalProperties: false, required: ['action', 'kind', 'task', 'reason'], properties };
+  const ids = candidates.map(tab => String(tab.id));
+  return { type: 'object', additionalProperties: false, required: ['decisions'], properties: {
+    decisions: { type: 'object', additionalProperties: false, required: ids,
+      properties: Object.fromEntries(ids.map(id => [id, decision])) },
+  } };
+}
 export function validateCleanupDecisions(value: unknown, candidates: CleanupCandidate[], tier?: CleanupTier): CleanupDecision[] {
-  const decisions = (value as { decisions?: unknown })?.decisions;
-  if (!Array.isArray(decisions) || decisions.length !== candidates.length) throw new Error('清理模型遗漏标签或返回了无效结果，本次未执行。');
+  const raw = (value as { decisions?: unknown })?.decisions;
+  // Older / OpenAI-compatible endpoints may still return the array form. Both require full, unique coverage.
+  const decisions = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? Object.entries(raw).map(([id, item]) => ({ ...(item as object), id: String(Number(id)) === id ? Number(id) : NaN })) : raw;
+  if (!Array.isArray(decisions)) throw new Error('AI 返回格式不正确，页面均已保留，请重新分析。');
+  if (decisions.length !== candidates.length) throw new Error(`AI 返回 ${decisions.length} 项判断，当前需要 ${candidates.length} 项；页面均已保留，请重新分析。`);
   const ids = new Set(candidates.map(tab => tab.id));
   return decisions.map(item => {
     if (!item || !Number.isSafeInteger(item.id) || !ids.delete(item.id) ||

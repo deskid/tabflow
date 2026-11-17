@@ -1,6 +1,6 @@
 # TabFlow 隐私与数据说明
 
-适用版本：TabFlow 1.3.0。TabFlow 由个人开发者 deskid 提供，用于整理浏览会话，包括标签、原生标签组、书签和稍后读。隐私或数据处理问题请联系 [deskidzhou@gmail.com](mailto:deskidzhou@gmail.com)。
+适用版本：TabFlow 1.3.1。TabFlow 由个人开发者 deskid 提供，用于整理浏览会话，包括标签、原生标签组、书签和稍后读。隐私或数据处理问题请联系 [deskidzhou@gmail.com](mailto:deskidzhou@gmail.com)。
 
 ## 标签、书签和稍后读
 

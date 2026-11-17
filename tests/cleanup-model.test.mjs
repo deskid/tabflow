@@ -47,3 +47,28 @@ for (const provider of ['custom', 'codex_native', 'chatgpt_plan']) test(`${provi
   globalThis.__cleanupCloud = async () => ({ decisions: [{ ...decisions[0], id: 999 }] });
   if (provider === 'custom') await assert.rejects(api.decideCleanup(candidates, context, 'balanced', { provider }), /未知/);
 });
+
+for (const provider of ['custom', 'codex_native']) test(`${provider} requires all eight candidate IDs in structured output, excluding context`, async () => {
+  const ids = [103, 110, 117, 124, 131, 138, 145, 152];
+  const tabs = ids.map(id => ({ ...candidates[0], id }));
+  const verify = schema => {
+    assert.deepEqual(schema.properties.decisions.required, ids.map(String));
+    assert.deepEqual(Object.keys(schema.properties.decisions.properties), ids.map(String));
+    assert.equal(schema.properties.decisions.additionalProperties, false);
+    const properties = schema.properties.decisions.properties;
+    for (const id of ids) {
+      assert.deepEqual(properties[id].required, ['action', 'kind', 'task', 'reason']);
+      assert.equal(properties[id].additionalProperties, false);
+    }
+    return { decisions: Object.fromEntries([...ids].reverse().map(id => [id,
+      { action: 'keep', kind: 'other', task: '工作资料', reason: '保留可能继续使用的资料' }])) };
+  };
+  globalThis.chrome = { runtime: { sendNativeMessage(_host, request, callback) {
+    assert.equal(request.action, 'GENERATE_JSON');
+    callback({ success: true, protocolVersion: 1, data: verify(request.outputSchema) });
+  } } };
+  globalThis.__cleanupCloud = async (_settings, _prompt, _input, schema) => verify(schema);
+  const result = await api.decideCleanup(tabs, context, 'aggressive', { provider });
+  assert.deepEqual(result.map(item => item.id).sort((a, b) => a - b), ids);
+  assert(result.every(item => item.action === 'keep'));
+});

@@ -280,7 +280,17 @@ async function workerFixture(options = {}) {
     }
     if (url.endsWith('/oauth/revoke')) return new Response(null, { status: 200 });
     if (url.endsWith('/v1/models')) return Response.json({ models: [{ slug: 'fixture-model', display_name: 'Fixture', visibility: 'list' }] });
-    if (url.endsWith('/v1/responses')) return Response.json({ object: 'response', status: 'completed', output: [{ type: 'message', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify({ groups: [{ name: '组', color: 'blue', tabIds: [1] }] }) }] }] });
+    if (url.endsWith('/v1/responses')) {
+      const body = JSON.parse(init.body);
+      let result = { groups: [{ name: '组', color: 'blue', tabIds: [1] }] };
+      if (body.text.format.name === 'tabflow_cleanup') {
+        const ids = ['103', '110', '117', '124', '131', '138', '145', '152'];
+        assert.deepEqual(body.text.format.schema.properties.decisions.required, ids);
+        assert.deepEqual(Object.keys(body.text.format.schema.properties.decisions.properties), ids);
+        result = { decisions: Object.fromEntries(ids.map(id => [id, { action: 'keep', kind: 'other', task: '资料', reason: '仍可能需要' }])) };
+      }
+      return Response.json({ object: 'response', status: 'completed', output: [{ type: 'message', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify(result) }] }] });
+    }
     throw new Error('unexpected fixture URL');
   };
   globalThis[key] = { scope, fetch };
@@ -320,6 +330,9 @@ test('worker runs unchanged auth/model cores: signed OAuth, token-only HTTP, met
   const client = await load('client', { chrome: clientChrome });
   const groups = await client.planGroupByChatGPTPlan([{ id: 1, title: 'Title', url: 'https://example.test', groupId: -1 }], { model: 'fixture-model' });
   assert.deepEqual(groups, [{ name: '组', color: 'blue', tabIds: [1] }]);
+  const cleanup = await f.command('cleanup', [JSON.stringify({ candidates: [103, 110, 117, 124, 131, 138, 145, 152].map(id => ({ id })), context: [{ id: 2000 }] }), '逐页判断', 'fixture-model']);
+  assert.equal(cleanup.ok, true);
+  assert.deepEqual(Object.keys(cleanup.value.decisions), ['103', '110', '117', '124', '131', '138', '145', '152']);
   assert.equal(f.outboundHTTP.filter(item => item.url.includes('/v1/')).every(item => item.auth === 'Bearer access-secret-session'), true);
   const transcript = JSON.stringify(f.posts); assert.equal(transcript.includes('access-secret-session'), false); assert.equal(transcript.includes('refresh-secret-session'), false);
   assert.equal(transcript.includes('eyJhbGci'), false, 'signed ID token stays inside core worker memory');

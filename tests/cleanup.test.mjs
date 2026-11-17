@@ -119,6 +119,13 @@ test('model response boundary rejects missing, repeated, foreign IDs and invalid
     [{ ...decisions(tabs)[0], reason: '' }, decisions(tabs)[1]]]) {
     assert.throws(() => api.validateCleanupDecisions({ decisions: value }, tabs, 'balanced'));
   }
+  const keyed = Object.fromEntries(decisions(tabs).map(({ id, ...decision }) => [id, decision]));
+  assert.deepEqual(api.validateCleanupDecisions({ decisions: keyed }, tabs, 'balanced'), decisions(tabs));
+  for (const value of [{ 1: keyed[1] }, { ...keyed, 3: keyed[2] }, { 1: keyed[1], '02': keyed[2] },
+    { 1: keyed[1], 2: { ...keyed[2], action: 'close' } }]) {
+    assert.throws(() => api.validateCleanupDecisions({ decisions: value }, tabs, 'balanced'));
+  }
+  assert.throws(() => api.validateCleanupDecisions({ decisions: { 1: keyed[1] } }, tabs), /1 项判断.*2 项/);
 });
 
 test('site protection respects domain boundaries and model URLs remove credentials/query/hash', () => {
@@ -179,6 +186,18 @@ test('manual preview analyzes every eligible page in bounded batches; automatic 
   await automatic.controller.run();
   assert.equal(automatic.decideCalls.length, 1); assert.equal(automatic.decideCalls[0][0].length, 40);
   assert.equal(automatic.calls.length, 40);
+  const nativeTabs = Array.from({ length: 8 }, (_, index) => ({ id: index + 1 }));
+  const native = await ready({ tabs: nativeTabs });
+  native.sync.sidetab_settings.aiSettings = { provider: 'codex_native' };
+  const nativePlan = await native.controller.run(true);
+  assert.deepEqual(native.decideCalls.map(args => args[0].length), [4, 4]);
+  assert.equal(nativePlan.pages.filter(page => page.action === 'archive').length, 8);
+  assert.equal(native.calls.length, 0, 'preview never closes pages');
+  const nativeAutomatic = await ready({ tabs: nativeTabs });
+  nativeAutomatic.sync.sidetab_settings.aiSettings = { provider: 'codex_native' };
+  await nativeAutomatic.controller.run();
+  assert.deepEqual(nativeAutomatic.decideCalls.map(args => args[0].length), [4]);
+  assert.equal(nativeAutomatic.calls.length, 4);
 });
 
 test('all locally retained pages remain visible without a model request', async () => {
